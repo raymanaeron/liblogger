@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "liblogger",
+    "logger_tests"
+]
+# Add resolver configuration for edition 2021
+resolver = "2"
