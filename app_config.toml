@@ -1,6 +1,6 @@
 [logging]
 # Setting to file mode for persistent logging
-type = "file"
+type = "console"
 threshold = "debug"        # Show all log levels (debug is the lowest valid level)
 file_path = "workflow.log" # Name of the log file
 log_folder = "logs"        # Directory to store logs
