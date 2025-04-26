@@ -1,3 +1,17 @@
+/*
+ * Configuration management for the logger
+ * 
+ * This module handles:
+ * - Parsing configuration from TOML files
+ * - Defining the LogType enum (Console, File, Http)
+ * - Defining the LogLevel enum (Debug, Info, Warn, Error)
+ * - Implementing methods for level comparison and string conversion
+ * - Providing default configuration values
+ * 
+ * The configuration determines where logs are written, their format,
+ * and which severity levels are included in the output.
+ */
+
 use serde::Deserialize;
 use std::fs;
 use std::path::Path;

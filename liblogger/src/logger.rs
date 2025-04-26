@@ -1,3 +1,16 @@
+/*
+ * Logger implementation module
+ * 
+ * This file implements the core Logger functionality which includes:
+ * - Creation and initialization of the global logger instance
+ * - Configuration of the logger from TOML files or programmatically
+ * - Methods for logging messages at different severity levels
+ * - Thread-safe logging with proper synchronization
+ * 
+ * The Logger uses a singleton pattern with lazy initialization via OnceCell
+ * to ensure there's only one logger instance throughout the application.
+ */
+
 use once_cell::sync::OnceCell;
 use std::sync::{Arc, Mutex};
 use std::path::Path;

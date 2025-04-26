@@ -1,3 +1,17 @@
+/*
+ * Test application for the logging library
+ * 
+ * This application demonstrates and tests various logging features:
+ * - Basic logging at different levels
+ * - Using procedural macros for aspect-oriented logging
+ * - Testing retry behavior and error handling
+ * - Performance measurements
+ * - Circuit breaker pattern
+ * 
+ * Each test function demonstrates a specific logging feature using
+ * the procedural macros from the liblogger_macros crate.
+ */
+
 use liblogger::{Logger, log_info, log_warn, log_error, log_debug};
 use liblogger_macros::*;
 use rand::Rng;

@@ -1,3 +1,16 @@
+/*
+ * Log output implementations
+ * 
+ * This module defines different logging backends:
+ * - ConsoleOutput: Writes logs to stdout
+ * - FileOutput: Writes logs to files with rotation support
+ * - HttpOutput: Sends logs to a remote endpoint
+ * 
+ * Each output implements the LogOutput trait, which defines how
+ * log messages are formatted and written. The module also provides
+ * factory functions to create the appropriate output based on configuration.
+ */
+
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};

@@ -1,3 +1,20 @@
+/*
+ * Procedural macros for enhanced logging capabilities
+ * 
+ * This module provides procedural macros that can be applied to functions:
+ * - log_entry_exit: Logs when a function is entered and exited
+ * - log_errors: Logs any errors or panics from a function
+ * - measure_time: Logs execution time of a function
+ * - log_args: Logs function argument values
+ * - log_retries: Implements and logs retry logic
+ * - audit_log: Creates security audit logs
+ * - circuit_breaker: Implements the circuit breaker pattern
+ * - many more specialized logging macros
+ * 
+ * It also provides a helper macro initialize_logger_attributes that defines
+ * utility functions used by the other macros.
+ */
+
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
