@@ -955,7 +955,7 @@ pub fn log_result(args: TokenStream, input: TokenStream) -> TokenStream {
 // Helper functions to be included in the generated code
 /// Helper function to extract error from Result
 #[proc_macro]
-pub fn define_helper_functions(_input: TokenStream) -> TokenStream {
+pub fn initialize_logger_attributes(_input: TokenStream) -> TokenStream {
     TokenStream::from(quote!(
         // Helper function to check if a result is successful
         pub fn is_success<T: std::fmt::Debug + 'static>(result: &T) -> bool {

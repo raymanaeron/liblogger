@@ -2,10 +2,11 @@ use liblogger::{Logger, log_info, log_warn, log_error, log_debug};
 use liblogger_macros::*;
 use rand::Rng;
 
-// Import helper functions
-define_helper_functions!();
+// Import helper functions - renamed to better represent its purpose
+initialize_logger_attributes!();
 
 fn main() {
+    // Initialize the logger from default config file
     // Replace the default initialization with a custom one
     initialize_custom_logger();
     
