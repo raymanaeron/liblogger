@@ -11,3 +11,10 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 toml = "0.8.0"
 chrono = "0.4.26"
+liblogger_macros = { path = "../liblogger_macros", optional = true }
+
+[features]
+default = []
+proc_macros = ["dep:liblogger_macros"]
+prometheus = ["liblogger_macros/prometheus"]
+memory_usage = ["liblogger_macros/memory_usage"]

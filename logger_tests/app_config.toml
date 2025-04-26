@@ -1,8 +1,0 @@
-[logging]
-type = "file"              # console | file | http
-threshold = "debug"        # debug | info | warn | error
-file_path = "workflow.log" # used if type = "file"
-log_folder = "logs"        # where to store log files
-max_file_size_mb = 1       # rotate files after this size
-http_endpoint = "https://logs.example.com"  # used if type = "http"
-http_timeout_seconds = 5   # optional HTTP timeout

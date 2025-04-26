@@ -1,0 +1,17 @@
+[logging]
+# Force most basic console logger with no filters
+type = "console"
+threshold = "trace"        # Use lowest possible threshold to show all logs
+file_path = "workflow.log"
+log_folder = "logs"
+max_file_size_mb = 1
+http_endpoint = "https://logs.example.com"
+http_timeout_seconds = 5
+show_filename = true
+show_module = true
+console_colors = true
+log_format = "[{level}] [{timestamp}] {message}"  # Simplify log format
+timestamp_format = "%Y-%m-%d %H:%M:%S"           # Human-readable timestamp
+show_level_prefix = true   # Make sure level indicators are shown
+buffer_size = 0            # Disable buffering for immediate output
+force_flush = true         # Force immediate flush of logs
