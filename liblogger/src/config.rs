@@ -45,14 +45,27 @@ impl LogLevel {
     }
 
     pub fn should_log(&self, threshold: &LogLevel) -> bool {
-        match (self, threshold) {
-            (LogLevel::Debug, _) => true,
-            (LogLevel::Info, LogLevel::Debug) => false,
-            (LogLevel::Info, _) => true,
-            (LogLevel::Warn, LogLevel::Debug | LogLevel::Info) => false,
-            (LogLevel::Warn, _) => true,
-            (LogLevel::Error, LogLevel::Error) => true,
-            (LogLevel::Error, _) => false,
+        match threshold {
+            // If threshold is Debug, log everything
+            LogLevel::Debug => true,
+            
+            // If threshold is Info, log Info, Warn, Error but not Debug
+            LogLevel::Info => match self {
+                LogLevel::Debug => false,
+                _ => true,
+            },
+            
+            // If threshold is Warn, log only Warn and Error
+            LogLevel::Warn => match self {
+                LogLevel::Debug | LogLevel::Info => false,
+                _ => true,
+            },
+            
+            // If threshold is Error, log only Error
+            LogLevel::Error => match self {
+                LogLevel::Error => true,
+                _ => false,
+            },
         }
     }
 }
@@ -112,12 +125,12 @@ impl LogConfig {
     }
 
     pub fn ensure_log_folder_exists(&self) -> Result<(), String> {
-        if let LogType::File = self.log_type {
-            let path = Path::new(&self.log_folder);
-            if !path.exists() {
-                fs::create_dir_all(path)
-                    .map_err(|e| format!("Failed to create log directory: {}", e))?;
-            }
+        // Always create the log folder, regardless of log type
+        let path = Path::new(&self.log_folder);
+        if !path.exists() {
+            println!("[Config] Creating log directory: {:?}", path);
+            fs::create_dir_all(path)
+                .map_err(|e| format!("Failed to create log directory: {}", e))?;
         }
         Ok(())
     }

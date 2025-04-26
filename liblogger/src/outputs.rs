@@ -54,9 +54,17 @@ pub struct FileOutput {
 
 impl FileOutput {
     pub fn new(config: &LogConfig) -> Result<Self, String> {
-        config.ensure_log_folder_exists()?;
+        // Create log folder regardless of ensure_log_folder_exists
+        let folder_path = Path::new(&config.log_folder);
+        if !folder_path.exists() {
+            println!("[Logger] Creating log directory: {:?}", folder_path);
+            fs::create_dir_all(folder_path)
+                .map_err(|e| format!("Failed to create log directory: {}", e))?;
+        }
         
-        let file_path = Path::new(&config.log_folder).join(&config.file_path);
+        let file_path = folder_path.join(&config.file_path);
+        println!("[Logger] Log file will be created at: {:?}", file_path);
+        
         let max_file_size_bytes = config.max_file_size_mb * 1024 * 1024;
         
         let mut output = FileOutput {
@@ -67,11 +75,13 @@ impl FileOutput {
             current_size: 0,
         };
         
+        // Immediately try to open the file to confirm it works
         output.open_or_rotate()?;
+        println!("[Logger] Log file opened successfully");
         
         Ok(output)
     }
-    
+
     fn open_or_rotate(&mut self) -> Result<(), String> {
         // Check if file exists and get its size
         let file_exists = self.file_path.exists();
@@ -88,6 +98,14 @@ impl FileOutput {
             self.current_size = 0;
         } else {
             self.current_size = current_size;
+        }
+        
+        // Ensure directory exists before opening file
+        if let Some(parent) = self.file_path.parent() {
+            if !parent.exists() {
+                fs::create_dir_all(parent)
+                    .map_err(|e| format!("Failed to create directories for log file: {}", e))?;
+            }
         }
         
         let file = OpenOptions::new()

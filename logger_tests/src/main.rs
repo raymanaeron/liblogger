@@ -255,8 +255,16 @@ fn test_request_context() {
 // Custom logger initialization to ensure all logs are displayed
 fn initialize_custom_logger() {
     // Initialize logger with debug threshold to ensure all logs are shown
-    // The Logger::init() function doesn't return a Result, so we can't match on it
-    Logger::init();
+    match Logger::init_with_config_file("app_config.toml") {
+        Ok(_) => log_info!("Logger successfully initialized from config file"),
+        Err(e) => {
+            // Something went wrong with the config file
+            println!("Error initializing logger from config: {}", e);
+            // Fall back to console logging
+            Logger::init();
+            log_error!("Failed to initialize file logger, falling back to console");
+        }
+    }
     
     // Print a clear marker to see if logger is working
     log_info!("======== LOGGER TEST STARTED ========");

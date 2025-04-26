@@ -71,15 +71,43 @@ impl Logger {
 
     /// Initialize the logger with a specific configuration file
     pub fn init_with_config_file(config_path: &str) -> Result<(), String> {
-        let config = LogConfig::from_file(config_path)?;
+        println!("Initializing logger with config file: {}", config_path);
+        let config = match LogConfig::from_file(config_path) {
+            Ok(cfg) => {
+                println!("Config loaded successfully. Log type: {:?}", cfg.log_type);
+                cfg
+            },
+            Err(e) => {
+                println!("Error loading config: {}", e);
+                return Err(e);
+            }
+        };
         Self::init_with_config(config)
     }
 
     /// Initialize the logger with a LogConfig struct
     pub fn init_with_config(config: LogConfig) -> Result<(), String> {
+        println!("Setting up logger with log type: {:?}", config.log_type);
+        
         let logger = LOGGER_INSTANCE.get_or_init(|| Arc::new(Mutex::new(LoggerInner::new())));
-        let mut logger = logger.lock().unwrap();
-        logger.init_with_config(config)
+        let mut logger_guard = match logger.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                println!("Logger mutex was poisoned, recovering...");
+                poisoned.into_inner()
+            }
+        };
+        
+        match logger_guard.init_with_config(config) {
+            Ok(_) => {
+                println!("Logger initialized successfully");
+                Ok(())
+            },
+            Err(e) => {
+                println!("Failed to initialize logger: {}", e);
+                Err(e)
+            }
+        }
     }
 
     /// Log a debug message
