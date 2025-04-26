@@ -131,6 +131,21 @@ fn main() {
 }
 ```
 
+### Here is another basic usage:
+ 
+Initialize the logger and start logging:
+ 
+ ```rust
+ use logger::Logger;
+ 
+ fn main() {
+     Logger::init();
+     Logger::info("Application started", None);
+     Logger::warn("Low disk space", Some("disk=/dev/sda1 free=2%".to_string()));
+     Logger::error("Database connection failed", None);
+     Logger::debug("User login attempt", Some("user_id=12345".to_string()));
+ }
+ ```
  
  ---
  
