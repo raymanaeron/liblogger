@@ -35,7 +35,7 @@ Here's an example of how to properly set up the logger:
 
 ```rust
 use liblogger::{Logger, log_info, log_warn, log_error, log_debug};
-use liblogger_macros::*;
+use liblogger_macros::*; 
 
 // IMPORTANT: This macro must be called at the module level 
 // to make all attribute macros available
