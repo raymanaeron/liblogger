@@ -15,8 +15,9 @@ mod outputs;
 mod logger;
 
 pub use logger::Logger;
-pub use config::LogConfig;
-pub use config::LogLevel;
+pub use config::{LogConfig, LogLevel};
+// Also re-export LogType to make it publicly accessible
+pub use config::LogType;
 
 // Add the macros to be publicly accessible
 #[macro_export]
@@ -57,4 +58,9 @@ macro_rules! log_error {
     ($message:expr, $context:expr) => {
         $crate::Logger::error($message, $context, file!(), line!(), module_path!())
     };
+}
+
+// Expose a shutdown function for clean exit
+pub fn shutdown_logger() -> Result<(), String> {
+    Logger::shutdown()
 }

@@ -16,16 +16,37 @@ use std::sync::{Arc, Mutex};
 use std::path::Path;
 use chrono::Utc;
 use std::io::{self, Write};
+use tokio::sync::mpsc::{self, Sender, Receiver};
+use tokio::runtime::Runtime;
+use std::pin::Pin;
+use std::future::Future;
 
 use crate::config::{LogConfig, LogLevel};
-use crate::outputs::{LogOutput, create_log_output};
+use crate::outputs::{LogOutput, create_log_output, create_async_log_output, AsyncLogOutputTrait};
+use crate::outputs::AsyncLogOutput;
 
 static LOGGER_INSTANCE: OnceCell<Arc<Mutex<LoggerInner>>> = OnceCell::new();
+static RUNTIME: OnceCell<Runtime> = OnceCell::new();
+
+// Message structure for async logging channel
+struct LogMessage {
+    timestamp: String,
+    level: LogLevel,
+    message: String,
+    context: Option<String>,
+    file: String,
+    line: u32,
+    module: String,
+}
 
 struct LoggerInner {
     initialized: bool,
     config: Option<LogConfig>,
     output: Option<Box<dyn LogOutput>>,
+    // Channel sender for async logging
+    async_sender: Option<Sender<LogMessage>>,
+    // Flag to indicate if async logging is enabled
+    async_enabled: bool,
 }
 
 impl LoggerInner {
@@ -34,26 +55,62 @@ impl LoggerInner {
             initialized: false,
             config: None,
             output: None,
+            async_sender: None,
+            async_enabled: false,
         }
     }
 
     fn init_with_config(&mut self, config: LogConfig) -> Result<(), String> {
         self.config = Some(config.clone());
+        
+        // Initialize synchronous output for fallback
         self.output = Some(create_log_output(&config)?);
+        
+        // Try to get or initialize the Tokio runtime
+        let runtime = match RUNTIME.get() {
+            Some(rt) => rt,
+            None => {
+                // Create a new runtime
+                let rt = Runtime::new()
+                    .map_err(|e| format!("Failed to create Tokio runtime: {}", e))?;
+                
+                RUNTIME.set(rt).map_err(|_| "Failed to set Tokio runtime".to_string())?;
+                RUNTIME.get().unwrap()
+            }
+        };
+        
+        // Initialize the async logging channel
+        let (tx, rx) = mpsc::channel::<LogMessage>(1024); // Buffer size of 1024 messages
+        self.async_sender = Some(tx);
+        
+        // Clone the config for the async task
+        let config_clone = config.clone();
+        
+        // Spawn the async logging task
+        runtime.spawn(async move {
+            if let Err(e) = process_log_messages(rx, config_clone).await {
+                eprintln!("Async logger task error: {}", e);
+            }
+        });
+        
         self.initialized = true;
+        self.async_enabled = true;
+        
         Ok(())
     }
 
     fn log(&mut self, level: LogLevel, message: &str, context: Option<&str>, file: &str, line: u32, module: &str) {
-        // If not initialized, log to stderr as fallback
-        if !self.initialized {
-            let timestamp = Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+        // Get current timestamp for both sync and async paths
+        let timestamp = Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+        
+        // If not initialized or async is disabled, log synchronously
+        if !self.initialized || !self.async_enabled {
             let log_line = if let Some(ctx) = context {
                 format!("{} [{}] [{}:{}] [{}] {} | Context: {}\n", 
-                    timestamp, level.as_str(), file, line, module, message, ctx)
+                    &timestamp, level.as_str(), file, line, module, message, ctx)
             } else {
                 format!("{} [{}] [{}:{}] [{}] {}\n", 
-                    timestamp, level.as_str(), file, line, module, message)
+                    &timestamp, level.as_str(), file, line, module, message)
             };
             let _ = io::stderr().write_all(log_line.as_bytes());
             return;
@@ -62,16 +119,90 @@ impl LoggerInner {
         // Check if we should log this level
         if let Some(config) = &self.config {
             if level.should_log(&config.threshold) {
-                let timestamp = Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
-                if let Some(output) = &mut self.output {
-                    if let Err(e) = output.write_log(&timestamp, &level, message, file, line, module, context) {
-                        // If logging fails, write to stderr as fallback
-                        let _ = writeln!(io::stderr(), "Logging failed: {}. Original message: {}", e, message);
+                // For async logging, send message to channel
+                if let Some(sender) = &self.async_sender {
+                    let log_message = LogMessage {
+                        timestamp: timestamp.clone(), // Clone the timestamp
+                        level: level.clone(),
+                        message: message.to_string(),
+                        context: context.map(|s| s.to_string()),
+                        file: file.to_string(),
+                        line,
+                        module: module.to_string(),
+                    };
+                    
+                    // Try to send the message async
+                    if let Err(_) = sender.try_send(log_message) {
+                        // If channel is full, fall back to sync logging
+                        if let Some(output) = &mut self.output {
+                            let _ = output.write_log(
+                                &timestamp,
+                                &level,
+                                message,
+                                file,
+                                line,
+                                module,
+                                context
+                            );
+                        }
                     }
+                } else if let Some(output) = &mut self.output {
+                    // Fallback to sync logging if no sender
+                    let _ = output.write_log(
+                        &timestamp,
+                        &level,
+                        message,
+                        file,
+                        line,
+                        module,
+                        context
+                    );
                 }
             }
         }
     }
+}
+
+// Async function to process log messages from the channel
+async fn process_log_messages(mut receiver: Receiver<LogMessage>, config: LogConfig) -> Result<(), String> {
+    // Create async output
+    let mut async_output = create_async_log_output(&config)?;
+    
+    // Process messages as they arrive
+    while let Some(msg) = receiver.recv().await {
+        // Instead of trying to await the boxed future directly, let's run it in a different way
+        // Create a wrapper async block that calls the boxed future
+        let result = run_async_log(&mut async_output, &msg).await;
+        
+        if let Err(e) = result {
+            eprintln!("Async log error: {}", e);
+        }
+    }
+    
+    Ok(())
+}
+
+// Helper function to properly handle the boxed future
+async fn run_async_log(
+    output: &mut AsyncLogOutput, 
+    msg: &LogMessage
+) -> Result<(), String> {
+    // Get the boxed future
+    let boxed_future = output.write_log_async(
+        &msg.timestamp,
+        &msg.level,
+        &msg.message,
+        &msg.file,
+        msg.line,
+        &msg.module,
+        msg.context.as_deref()
+    );
+    
+    // Pin the boxed future properly before awaiting it
+    let pinned_future: Pin<Box<dyn Future<Output = Result<(), String>> + Send>> = Pin::from(boxed_future);
+    
+    // Now we can await the properly pinned future
+    pinned_future.await
 }
 
 pub struct Logger;
@@ -84,17 +215,7 @@ impl Logger {
 
     /// Initialize the logger with a specific configuration file
     pub fn init_with_config_file(config_path: &str) -> Result<(), String> {
-        println!("Initializing logger with config file: {}", config_path);
-        let config = match LogConfig::from_file(config_path) {
-            Ok(cfg) => {
-                println!("Config loaded successfully. Log type: {:?}", cfg.log_type);
-                cfg
-            },
-            Err(e) => {
-                println!("Error loading config: {}", e);
-                return Err(e);
-            }
-        };
+        let config = LogConfig::from_file(config_path)?;
         Self::init_with_config(config)
     }
 
@@ -164,5 +285,31 @@ impl Logger {
                 let _ = io::stderr().write_all(log_line.as_bytes());
             }
         }
+    }
+
+    /// Shutdown the logger gracefully, ensuring all pending logs are written
+    pub fn shutdown() -> Result<(), String> {
+        // Try to get the runtime
+        if let Some(rt) = RUNTIME.get() {
+            // Get a handle to the runtime for shutdown
+            let handle = rt.handle().clone();
+            handle.spawn(async {
+                // Give some time for pending logs to be processed
+                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+            });
+            
+            // Give it a moment to process remaining logs
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            
+            println!("Logger shutdown completed");
+        }
+        Ok(())
+    }
+}
+
+// Ensure the logger is properly shutdown when the program exits
+impl Drop for Logger {
+    fn drop(&mut self) {
+        let _ = Self::shutdown();
     }
 }

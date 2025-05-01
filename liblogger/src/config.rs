@@ -148,4 +148,16 @@ impl LogConfig {
         }
         Ok(())
     }
+
+    pub fn default() -> Self {
+        LogConfig {
+            log_type: LogType::Console,
+            threshold: LogLevel::Info,
+            file_path: "app.log".to_string(),
+            log_folder: "logs".to_string(),
+            max_file_size_mb: 10,
+            http_endpoint: "http://localhost:8080/logs".to_string(),
+            http_timeout_seconds: 5,
+        }
+    }
 }

@@ -19,6 +19,10 @@ use rand::Rng;
 // Import helper functions - renamed to better represent its purpose
 initialize_logger_attributes!();
 
+// Add the async test module
+mod async_test;
+use async_test::test_async_logger;
+
 fn main() {
     // Initialize the logger from default config file
     // Replace the default initialization with a custom one
@@ -86,6 +90,9 @@ fn main() {
     test_version_tag();
     
     test_request_context();
+    
+    // Test the async logger
+    test_async_logger();
     
     log_info!("All tests completed!");
 }
