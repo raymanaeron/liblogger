@@ -17,8 +17,9 @@ use std::sync::{Arc, Mutex};
 use std::path::Path;
 use chrono::Utc;
 use std::io::{self, Write};
-use tokio::sync::mpsc::{self, Sender, Receiver};
+use tokio::sync::{mpsc::{self, Sender, Receiver}, oneshot};
 use tokio::runtime::Runtime;
+use tokio::time::{timeout, Duration as TokioDuration};
 
 use crate::config::{LogConfig, LogLevel};
 use crate::outputs::{LogOutput, create_log_output, create_async_log_output, AsyncLogOutputTrait};
@@ -39,12 +40,18 @@ struct LogMessage {
     module: String,
 }
 
+// Command enum for controlling the background worker
+enum LogCommand {
+    Entry(LogMessage),
+    Shutdown(oneshot::Sender<()>),
+}
+
 struct LoggerInner {
     initialized: bool,
     config: Option<LogConfig>,
     output: Option<Box<dyn LogOutput>>,
     // Channel sender for async logging
-    async_sender: Option<Sender<LogMessage>>,
+    async_sender: Option<Sender<LogCommand>>,
     /// Flag to indicate if asynchronous logging is enabled
     /// When false, all logging operations will be synchronous
     async_enabled: bool,
@@ -77,8 +84,8 @@ impl LoggerInner {
                 Runtime::new().expect("Failed to create Tokio runtime")
             });
             
-            // Create channel for async logging
-            let (tx, rx) = mpsc::channel::<LogMessage>(100);
+            // Create channel for async logging with LogCommand instead of LogMessage
+            let (tx, rx) = mpsc::channel::<LogCommand>(100);
             self.async_sender = Some(tx);
             
             // Create the async output
@@ -86,7 +93,7 @@ impl LoggerInner {
             
             // Spawn a task to process log messages
             runtime.spawn(async move {
-                process_log_messages(rx, async_output).await
+                process_log_commands(rx, async_output).await
                     .unwrap_or_else(|e| eprintln!("Async logging failed: {}", e));
             });
         }
@@ -125,8 +132,8 @@ impl LoggerInner {
                         module: module.to_string(),
                     };
                     
-                    // Send to the async channel, fallback to sync if channel is full
-                    if let Err(_) = sender.try_send(log_message) {
+                    // Send to the async channel as a LogCommand::Entry, fallback to sync if channel is full
+                    if let Err(_) = sender.try_send(LogCommand::Entry(log_message)) {
                         // Channel full or closed, fallback to sync logging
                         self.log_sync(&timestamp, &level, message, context, file, line, module);
                     }
@@ -183,17 +190,39 @@ fn format_log_message(timestamp: &str, level: &LogLevel, message: &str,
     }
 }
 
-// Async function to process log messages from the channel
-async fn process_log_messages(mut receiver: Receiver<LogMessage>, mut output: AsyncLogOutput) -> Result<(), String> {
-    while let Some(msg) = receiver.recv().await {
-        // Format the log message
-        let formatted_message = format_log_message(
-            &msg.timestamp, &msg.level, &msg.message, 
-            msg.context.as_deref(), &msg.file, msg.line, &msg.module);
-        
-        // Write using the async output
-        if let Err(e) = output.write_log_async(&formatted_message).await {
-            eprintln!("Async logging error: {}", e);
+// Async function to process log commands from the channel
+async fn process_log_commands(mut receiver: Receiver<LogCommand>, mut output: AsyncLogOutput) -> Result<(), String> {
+    while let Some(cmd) = receiver.recv().await {
+        match cmd {
+            LogCommand::Entry(msg) => {
+                // Format the log message
+                let formatted_message = format_log_message(
+                    &msg.timestamp, &msg.level, &msg.message, 
+                    msg.context.as_deref(), &msg.file, msg.line, &msg.module);
+                
+                // Write using the async output
+                if let Err(e) = output.write_log_async(&formatted_message).await {
+                    eprintln!("Async logging error: {}", e);
+                }
+            },
+            LogCommand::Shutdown(completion_sender) => {
+                // Final log message before shutdown
+                let timestamp = Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+                let message = "Logger shutdown initiated, ensuring all logs are flushed";
+                let formatted_message = format_log_message(
+                    &timestamp, &LogLevel::Info, message, None, "logger.rs", 0, "liblogger");
+                
+                // Final flush before shutdown
+                if let Err(e) = output.write_log_async(&formatted_message).await {
+                    eprintln!("Error writing final log message: {}", e);
+                }
+                
+                // Notify that shutdown is complete
+                let _ = completion_sender.send(());
+                
+                // Break the loop to end the task
+                break;
+            }
         }
     }
     
@@ -287,31 +316,73 @@ impl Logger {
     pub fn shutdown() -> Result<(), String> {
         // Try to get the runtime
         if let Some(rt) = RUNTIME.get() {
-            // Get a handle to the runtime for shutdown
-            let handle = rt.handle().clone();
-            handle.spawn(async {
-                // Give some time for pending logs to be processed
-                tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
-            });
+            // Check if we have an async logger initialized
+            if let Some(logger) = LOGGER_INSTANCE.get() {
+                if let Ok(logger_guard) = logger.lock() {
+                    if logger_guard.async_enabled {
+                        if let Some(sender) = &logger_guard.async_sender {
+                            // Create a oneshot channel for completion notification
+                            let (completion_tx, completion_rx) = oneshot::channel();
+                            
+                            // Clone sender outside of task to avoid reference issues
+                            let sender_clone = sender.clone();
+                            
+                            // Send shutdown command
+                            // Use block to release the mutex guard before the blocking operation
+                            drop(logger_guard);
+                            
+                            // Spawn a Tokio task to send the shutdown command
+                            let handle = rt.spawn(async move {
+                                if let Err(e) = sender_clone.send(LogCommand::Shutdown(completion_tx)).await {
+                                    eprintln!("Failed to send shutdown command: {}", e);
+                                    return false;
+                                }
+                                
+                                // Wait for completion with timeout
+                                match timeout(TokioDuration::from_secs(5), completion_rx).await {
+                                    Ok(Ok(())) => {
+                                        println!("Logger shutdown completed successfully");
+                                        true
+                                    },
+                                    Ok(Err(_)) => {
+                                        eprintln!("Shutdown completion channel was closed");
+                                        false
+                                    },
+                                    Err(_) => {
+                                        eprintln!("Logger shutdown timed out after 5 seconds");
+                                        false
+                                    }
+                                }
+                            });
+                            
+                            // Wait for the shutdown to complete
+                            match rt.block_on(handle) {
+                                Ok(true) => return Ok(()),
+                                Ok(false) => return Err("Logger shutdown failed".to_string()),
+                                Err(e) => return Err(format!("Logger shutdown task panicked: {}", e)),
+                            }
+                        }
+                    }
+                }
+            }
             
-            // Give it a moment to process remaining logs
-            std::thread::sleep(std::time::Duration::from_secs(2));
-            
-            // Final flush for file outputs if they exist
-            // This is important for non-force-flushed files to ensure all logs are persisted
+            // If we can't do an async shutdown, still try to flush any file outputs
             if let Some(logger) = LOGGER_INSTANCE.get() {
                 if let Ok(mut guard) = logger.lock() {
                     if let Some(ref mut output) = guard.output {
-                        // All file writers will perform a final flush here regardless of force_flush setting
-                        // Other output types will just ignore this call
-                        let _ = output.write_log(""); // This will trigger a flush in most implementations
+                        // For non-async loggers, write an empty message which will trigger a flush
+                        let _ = output.write_log("");
                     }
                 }
             }
             
             println!("Logger shutdown completed");
+            Ok(())
+        } else {
+            // No runtime means no async logging was initialized
+            println!("No async logger to shutdown");
+            Ok(())
         }
-        Ok(())
     }
 }
 
