@@ -84,12 +84,16 @@ pub fn log_errors(_args: TokenStream, input: TokenStream) -> TokenStream {
         let result = catch_unwind(AssertUnwindSafe(|| #orig_block));
         
         match result {
-            Ok(output) => {
-                // Check if output is a Result and has an Err variant
-                if let Some(err) = extract_error(&output) {
-                    liblogger::log_error!(&format!("{} returned error: {:?}", #fn_name, err), None);
+            Ok(inner_result) => {
+                // Use pattern matching to handle Result types
+                match &inner_result {
+                    Ok(_) => {},  // Success case, no logging needed
+                    Err(err) => {
+                        // Error case, log the error
+                        liblogger::log_error!(&format!("{} returned error: {:?}", #fn_name, err), None);
+                    }
                 }
-                output
+                inner_result
             },
             Err(panic_err) => {
                 let panic_msg = if let Some(s) = panic_err.downcast_ref::<&str>() {
@@ -204,26 +208,34 @@ pub fn log_retries(args: TokenStream, input: TokenStream) -> TokenStream {
             
             let result = (|| #orig_block)();
             
-            if is_success(&result) || attempts >= #max_attempts {
-                if attempts >= #max_attempts && !is_success(&result) {
-                    liblogger::log_error!(
-                        &format!("{} failed after {} attempts ", #fn_name, attempts), 
+            // Use pattern matching to determine success or failure
+            match &result {
+                Ok(_) => {
+                    // Success case
+                    if attempts > 1 {
+                        liblogger::log_info!(
+                            &format!("{} succeeded after {} attempts", #fn_name, attempts), 
+                            None
+                        );
+                    }
+                    return result;
+                },
+                Err(err) => {
+                    // Error case
+                    if attempts >= #max_attempts {
+                        liblogger::log_error!(
+                            &format!("{} failed after {} attempts: {:?}", #fn_name, attempts, err), 
+                            None
+                        );
+                        return result;
+                    }
+                    
+                    liblogger::log_warn!(
+                        &format!("{} attempt {} failed: {:?}", #fn_name, attempts, err), 
                         None
                     );
-                } else if attempts > 1 {
-                    liblogger::log_info!(
-                        &format!("{} succeeded after {} attempts ", #fn_name, attempts), 
-                        None
-                    );
+                    // Continue to next retry iteration
                 }
-                return result;
-            }
-            
-            if let Some(err) = extract_error(&result) {
-                liblogger::log_warn!(
-                    &format!("{} attempt {} failed: {:?}", #fn_name, attempts, err), 
-                    None
-                );
             }
         }
     }));
@@ -231,90 +243,106 @@ pub fn log_retries(args: TokenStream, input: TokenStream) -> TokenStream {
     TokenStream::from(quote!(#input_fn))
 }
 
-/// Create audit logs for security-critical operations
+/// Create detailed audit logs
 #[proc_macro_attribute]
-pub fn audit_log(args: TokenStream, input: TokenStream) -> TokenStream {
-    let args = parse_macro_input!(args as MacroArgs);
-    let category = args.category.unwrap_or_else(|| "general".to_string());
-    
+pub fn audit_log(_args: TokenStream, input: TokenStream) -> TokenStream {
     let mut input_fn = parse_macro_input!(input as ItemFn);
     let fn_name = get_fn_name(&input_fn);
     let orig_block = input_fn.block.clone();
     
     input_fn.block = Box::new(parse_quote!({
-        liblogger::log_info!(
-            &format!("AUDIT: [{}] Operation {} started", #category, #fn_name), 
-            None
-        );
+        let user_id = get_thread_local_value("user_id").unwrap_or_else(|| "unknown".to_string());
+        liblogger::log_info!(&format!("AUDIT: {} called", #fn_name), Some(format!("user_id={}", user_id)));
+        
+        let start_time = std::time::Instant::now();
         let result = #orig_block;
-        liblogger::log_info!(
-            &format!("AUDIT: [{}] Operation {} completed", #category, #fn_name), 
-            Some(format!("result_type={}", if is_success(&result) { "success" } else { "failure" }))
-        );
+        let duration = start_time.elapsed();
+        
+        // Use pattern matching on result
+        match &result {
+            () => {
+                // Unit return type
+                liblogger::log_info!(
+                    &format!("AUDIT: {} completed in {} ms", #fn_name, duration.as_millis()),
+                    Some(format!("user_id={}", user_id))
+                );
+            },
+            _ => {
+                // Any other return type
+                liblogger::log_info!(
+                    &format!("AUDIT: {} completed in {} ms with result: {:?}", 
+                        #fn_name, duration.as_millis(), result),
+                    Some(format!("user_id={}", user_id))
+                );
+            }
+        }
+        
         result
     }));
     
     TokenStream::from(quote!(#input_fn))
 }
 
-/// Implement a circuit breaker patter
+/// Circuit breaker pattern with logging
 #[proc_macro_attribute]
 pub fn circuit_breaker(args: TokenStream, input: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args as MacroArgs);
-    let failure_threshold = args.failure_threshold.unwrap_or(5);
-        
+    let threshold = args.failure_threshold.unwrap_or(3);
+    
     let mut input_fn = parse_macro_input!(input as ItemFn);
     let fn_name = get_fn_name(&input_fn);
     let orig_block = input_fn.block.clone();
-    let counter_var = format_ident!("CB_FAILURES_{}", fn_name.to_uppercase());
-    let circuit_open_var = format_ident!("CB_OPEN_{}", fn_name.to_uppercase());
-    let last_failure_var = format_ident!("CB_LAST_FAILURE_{}", fn_name.to_uppercase());
     
     input_fn.block = Box::new(parse_quote!({
-        use std::sync::atomic::{AtomicU32, AtomicBool, AtomicI64, Ordering};
-        use std::time::{SystemTime, UNIX_EPOCH};
-        // Create static counters if they don't exist
-        static #counter_var: AtomicU32 = AtomicU32::new(0);
-        static #circuit_open_var: AtomicBool = AtomicBool::new(false);
-        static #last_failure_var: AtomicI64 = AtomicI64::new(0);
+        use std::sync::atomic::{AtomicU32, Ordering};
+        use std::sync::Mutex;
+        use std::time::{Instant, Duration};
         
-        // Check if circuit is open
-        if #circuit_open_var.load(Ordering::SeqCst) {
-            // Check if we should try to reset (after 30 seconds)
-            let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
-            let last_failure = #last_failure_var.load(Ordering::SeqCst);
-            
-            if now - last_failure >= 30 {
-                // Allow one request through to test if the system has recovered
-                #circuit_open_var.store(false, Ordering::SeqCst);
-                #counter_var.store(0, Ordering::SeqCst);
-                liblogger::log_info!(&format!("Circuit breaker for {} is attempting to reset", #fn_name), None);
-            } else {
-                liblogger::log_warn!(&format!("Circuit breaker for {} is open, fast-failing request", #fn_name), None);
-                return Err(format!("Service {} is unavailable (circuit open)", #fn_name).into());
+        // Thread-safe failure counters
+        static FAILURE_COUNT: AtomicU32 = AtomicU32::new(0);
+        static LAST_SUCCESS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        
+        // Reset failure count after 30 seconds of success
+        let now = Instant::now();
+        let last_success_time = LAST_SUCCESS.load(Ordering::Relaxed);
+        
+        if last_success_time > 0 {
+            let elapsed = now.duration_since(Instant::now() - Duration::from_secs(last_success_time));
+            if elapsed > Duration::from_secs(30) {
+                FAILURE_COUNT.store(0, Ordering::Relaxed);
             }
         }
         
-        // Execute the function
+        // Check if circuit is open (too many failures)
+        let failures = FAILURE_COUNT.load(Ordering::Relaxed);
+        if failures >= #threshold {
+            liblogger::log_error!(
+                &format!("Circuit breaker open for {}: {} failures exceeded threshold {}", 
+                    #fn_name, failures, #threshold),
+                None
+            );
+            return Err(format!("Circuit breaker open for {}", #fn_name).into());
+        }
+        
+        // Call the function and track success/failure
         let result = #orig_block;
         
-        // Update circuit breaker state
-        if is_success(&result) {
-            if #counter_var.load(Ordering::SeqCst) > 0 {
-                #counter_var.store(0, Ordering::SeqCst);
-                liblogger::log_info!(&format!("Circuit breaker for {} reset after success", #fn_name), None);
-            }
-        } else {
-            let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64;
-            #last_failure_var.store(now, Ordering::SeqCst);
-            let failures = #counter_var.fetch_add(1, Ordering::SeqCst) + 1;
-            if failures >= #failure_threshold && !#circuit_open_var.load(Ordering::SeqCst) {
-                #circuit_open_var.store(true, Ordering::SeqCst);
-                liblogger::log_error!(
-                    &format!("Circuit breaker for {} opened after {} consecutive failures", 
-                        #fn_name, failures), 
-                    None
-                );
+        // Use pattern matching for Result
+        match &result {
+            Ok(_) => {
+                // Reset failure count on success
+                FAILURE_COUNT.store(0, Ordering::Relaxed);
+                LAST_SUCCESS.store(now.elapsed().as_secs(), Ordering::Relaxed);
+            },
+            Err(_) => {
+                // Increment failure count
+                FAILURE_COUNT.fetch_add(1, Ordering::Relaxed);
+                let new_count = FAILURE_COUNT.load(Ordering::Relaxed);
+                
+                liblogger::log_warn!(&format!(
+                    "Circuit breaker: {} failed ({}/{} failures)", 
+                    #fn_name, new_count, #threshold
+                ), None);
             }
         }
         
@@ -328,48 +356,49 @@ pub fn circuit_breaker(args: TokenStream, input: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn throttle_log(args: TokenStream, input: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args as MacroArgs);
-    let rate = args.rate.unwrap_or(10);
+    let rate = args.rate.unwrap_or(5);
     
     let mut input_fn = parse_macro_input!(input as ItemFn);
     let fn_name = get_fn_name(&input_fn);
     let orig_block = input_fn.block.clone();
-    let counter_var = format_ident!("LOG_THROTTLE_{}", fn_name.to_uppercase());
-    let minute_var = format_ident!("LOG_THROTTLE_MINUTE_{}", fn_name.to_uppercase());
-    let skipped_var = format_ident!("LOG_THROTTLE_SKIPPED_{}", fn_name.to_uppercase());
     
     input_fn.block = Box::new(parse_quote!({
-        use std::sync::atomic::{AtomicU32, AtomicI64, Ordering};
+        use std::sync::atomic::{AtomicUsize, Ordering};
         use std::time::{SystemTime, UNIX_EPOCH};
-        // Create static counters if they don't exist
-        static #counter_var: AtomicU32 = AtomicU32::new(0);
-        static #minute_var: AtomicI64 = AtomicI64::new(0);
-        static #skipped_var: AtomicU32 = AtomicU32::new(0);
         
-        // Check throttle limits
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() / 60;
-        let current_minute = #minute_var.load(Ordering::SeqCst);
+        static COUNTER: AtomicUsize = AtomicUsize::new(0);
+        static LAST_MINUTE: AtomicUsize = AtomicUsize::new(0);
+        static SKIPPED_COUNT: AtomicUsize = AtomicUsize::new(0);
         
-        let should_log = if current_minute != now as i64 {
-            // New minute, reset counters
-            #minute_var.store(now as i64, Ordering::SeqCst);
-            let skipped = #skipped_var.swap(0, Ordering::SeqCst);
-            if skipped > 0 {
-                liblogger::log_info!(
-                    &format!("Throttled logs for {}: skipped {} logs in previous minute", 
-                        #fn_name, skipped),
-                    None
-                );
-            }
-            #counter_var.store(1, Ordering::SeqCst);
-            true
-        } else {
-            // Same minute, check counter
-            let count = #counter_var.fetch_add(1, Ordering::SeqCst) + 1;
-            if count <= #rate {
+        // Get current minute for rate limiting window
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
+        let current_minute = (now.as_secs() / 60) as usize;
+        
+        // Check if we're in a new minute or still in the rate limit
+        let should_log = {
+            let last_minute = LAST_MINUTE.load(Ordering::SeqCst);
+            if last_minute != current_minute {
+                // New minute, reset counter and log a summary of skipped messages
+                LAST_MINUTE.store(current_minute, Ordering::SeqCst);
+                let skipped = SKIPPED_COUNT.swap(0, Ordering::SeqCst);
+                if skipped > 0 {
+                    liblogger::log_info!(
+                        &format!("Throttled logs for {}: skipped {} logs in previous minute", 
+                            #fn_name, skipped),
+                        None
+                    );
+                }
+                COUNTER.store(1, Ordering::SeqCst);
                 true
             } else {
-                #skipped_var.fetch_add(1, Ordering::SeqCst);
-                false
+                // Same minute, check counter
+                let count = COUNTER.fetch_add(1, Ordering::SeqCst) + 1;
+                if count <= #rate as usize {
+                    true
+                } else {
+                    SKIPPED_COUNT.fetch_add(1, Ordering::SeqCst);
+                    false
+                }
             }
         };
         
@@ -377,11 +406,8 @@ pub fn throttle_log(args: TokenStream, input: TokenStream) -> TokenStream {
         
         // Only log if within rate limits
         if should_log {
-            if is_success(&result) {
-                liblogger::log_info!(&format!("{} succeeded", #fn_name), None);
-            } else if let Some(err) = extract_error(&result) {
-                liblogger::log_error!(&format!("{} failed: {:?}", #fn_name, err), None);
-            }
+            // Simple logging without trying to match on the result type
+            liblogger::log_info!(&format!("{} executed", #fn_name), None);
         }
         
         result
@@ -410,12 +436,22 @@ pub fn dependency_latency(args: TokenStream, input: TokenStream) -> TokenStream 
         let result = #orig_block;
         let duration_ms = start_time.elapsed().as_millis();
         
-        // Only log if within rate limits
-        if is_success(&result) {
-            liblogger::log_info!(&format!("Dependency call to {} completed in {} ms", #target, duration_ms), None);
-        } else if let Some(err) = extract_error(&result) {
-            liblogger::log_error!(&format!("Dependency call to {} failed after {} ms: {:?}", 
-                #target, duration_ms, err), None);
+        // Use pattern matching to handle different result types
+        match &result {
+            Ok(_) => {
+                liblogger::log_info!(&format!("Dependency call to {} completed in {} ms", #target, duration_ms), None);
+            },
+            Err(err) => {
+                liblogger::log_error!(
+                    &format!("Dependency call to {} failed after {} ms with error: {:?}",
+                        #target, duration_ms, err),
+                    None
+                );
+            },
+            _ => {
+                // For non-Result types
+                liblogger::log_info!(&format!("Dependency call to {} completed in {} ms", #target, duration_ms), None);
+            }
         }
         
         result
@@ -433,9 +469,7 @@ pub fn log_response(_args: TokenStream, input: TokenStream) -> TokenStream {
     
     input_fn.block = Box::new(parse_quote!({
         let result = #orig_block;
-        if is_success(&result) {
-            liblogger::log_debug!(&format!("{} returned: {:?}", #fn_name, result), None);
-        }
+        liblogger::log_debug!(&format!("{} returned: {:?}", #fn_name, result), None);
         result
     }));
     
@@ -788,17 +822,21 @@ pub fn health_check(_args: TokenStream, input: TokenStream) -> TokenStream {
         let result = #orig_block;
         let duration = start_time.elapsed();
         
-        if is_success(&result) {
-            liblogger::log_info!(
-                &format!("Health check {} passed in {} ms ", #fn_name, duration.as_millis()),
-                None
-            );
-        } else if let Some(err) = extract_error(&result) {
-            liblogger::log_info!(
-                &format!("Health check {} failed in {} ms: {:?}", 
-                    #fn_name, duration.as_millis(), err),
-                None
-            );
+        // Use pattern matching to determine success or failure
+        match &result {
+            Ok(_) => {
+                liblogger::log_info!(
+                    &format!("Health check {} passed in {} ms", #fn_name, duration.as_millis()),
+                    None
+                );
+            },
+            Err(err) => {
+                liblogger::log_error!(
+                    &format!("Health check {} failed in {} ms: {:?}", 
+                        #fn_name, duration.as_millis(), err),
+                    None
+                );
+            }
         }
         
         result
@@ -825,29 +863,33 @@ pub fn log_result(args: TokenStream, input: TokenStream) -> TokenStream {
     input_fn.block = Box::new(parse_quote!({
         let result = #orig_block;
         
-        if is_success(&result) {
-            // Replace the match with if-else to avoid str_as_str
-            let level = #success_level_str;
-            if level == "debug" {
-                liblogger::log_debug!(&format!("{} succeeded with result: {:?}", #fn_name, result), None);
-            } else if level == "warn" {
-                liblogger::log_warn!(&format!("{} succeeded with result: {:?}", #fn_name, result), None);
-            } else if level == "error" {
-                liblogger::log_error!(&format!("{} succeeded with result: {:?}", #fn_name, result), None);
-            } else {
-                liblogger::log_info!(&format!("{} succeeded with result: {:?}", #fn_name, result), None);
-            }
-        } else if let Some(err) = extract_error(&result) {
-            // Replace the match with if-else to avoid str_as_str
-            let level = #error_level_str;
-            if level == "debug" {
-                liblogger::log_debug!(&format!("{} failed with error: {:?}", #fn_name, err), None);
-            } else if level == "info" {
-                liblogger::log_info!(&format!("{} failed with error: {:?}", #fn_name, err), None);
-            } else if level == "warn" {
-                liblogger::log_warn!(&format!("{} failed with error: {:?}", #fn_name, err), None);
-            } else {
-                liblogger::log_error!(&format!("{} failed with error: {:?}", #fn_name, err), None);
+        // Use pattern matching to handle the Result
+        match &result {
+            Ok(val) => {
+                // Success case with different log levels
+                let level = #success_level_str;
+                if level == "debug" {
+                    liblogger::log_debug!(&format!("{} succeeded with result: {:?}", #fn_name, val), None);
+                } else if level == "warn" {
+                    liblogger::log_warn!(&format!("{} succeeded with result: {:?}", #fn_name, val), None);
+                } else if level == "error" {
+                    liblogger::log_error!(&format!("{} succeeded with result: {:?}", #fn_name, val), None);
+                } else {
+                    liblogger::log_info!(&format!("{} succeeded with result: {:?}", #fn_name, val), None);
+                }
+            },
+            Err(err) => {
+                // Error case with different log levels
+                let level = #error_level_str;
+                if level == "debug" {
+                    liblogger::log_debug!(&format!("{} failed with error: {:?}", #fn_name, err), None);
+                } else if level == "info" {
+                    liblogger::log_info!(&format!("{} failed with error: {:?}", #fn_name, err), None);
+                } else if level == "warn" {
+                    liblogger::log_warn!(&format!("{} failed with error: {:?}", #fn_name, err), None);
+                } else {
+                    liblogger::log_error!(&format!("{} failed with error: {:?}", #fn_name, err), None);
+                }
             }
         }
         

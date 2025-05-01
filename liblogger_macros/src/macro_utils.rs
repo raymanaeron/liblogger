@@ -152,48 +152,6 @@ impl Parse for MacroArgs {
 /// Helper function to generate the helper functions code
 pub fn define_helper_functions() -> TokenStream2 {
     quote!(
-        // Helper function to check if a result is successful
-        pub fn is_success<T: std::fmt::Debug + 'static>(result: &T) -> bool {
-            use std::any::Any;
-            
-            // Using reflection to check if this is a Result type
-            let _type_id = std::any::TypeId::of::<T>();
-            let _result_type_id = std::any::TypeId::of::<Result<(), ()>>();
-            
-            // If it's a Result type, we can check for Ok/Err
-            if let Some(result_any) = (result as &dyn Any).downcast_ref::<Result<(), ()>>() {
-                result_any.is_ok()
-            } else {
-                // For non-Result types, assume success
-                true
-            }
-        }
-        
-        // Helper function to extract error from Result
-        pub fn extract_error<T: std::fmt::Debug + 'static>(result: &T) -> Option<String> {
-            use std::any::Any;
-            use std::fmt::Debug;
-            
-            // Using reflection with type name
-            let type_name = std::any::type_name::<T>();
-            if type_name.starts_with("core::result::Result") || 
-               type_name.starts_with("std::result::Result") {
-                // This is best-effort extraction of Error
-                if let Some(err) = (result as &dyn Any).downcast_ref::<Result<(), String>>() {
-                    if let Err(e) = err {
-                        return Some(e.clone());
-                    }
-                }
-                
-                // Generic fallback
-                if !is_success(result) {
-                    return Some(format!("{:?}", result));
-                }
-            }
-            
-            None
-        }
-        
         // Helper functions for trace ID management
         thread_local! {
             static TRACE_ID: std::cell::RefCell<Option<String>> = std::cell::RefCell::new(None);

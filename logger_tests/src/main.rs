@@ -159,8 +159,8 @@ fn log_result_test() -> Result<String, String> {
 
 // Rename to avoid the "expected identifier" errors
 #[audit_log]
-fn audit_log_test(user_id: i32, action: &str) {
-    log_info!(&format!("User {} performing action: {}", user_id, action));
+fn audit_log_test(_user_id: i32, action: &str) {
+    log_info!(&format!("User performing action: {}", action));
 }
 
 #[circuit_breaker(failure_threshold=2)]
