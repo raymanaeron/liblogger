@@ -535,7 +535,16 @@ impl AsyncLogOutputTrait for AsyncLogOutput {
     }
 }
 
-// Factory function for synchronous log outputs
+/// Creates a synchronous log output based on configuration
+///
+/// # Parameters
+/// - `config`: The logger configuration containing output type and settings
+///
+/// # Returns
+/// - `Result<Box<dyn LogOutput>, String>`: A boxed trait object implementing LogOutput or an error message
+///
+/// This function creates the appropriate LogOutput implementation (Console, File, or Http)
+/// based on the log_type specified in the configuration.
 pub fn create_log_output(config: &LogConfig) -> Result<Box<dyn LogOutput>, String> {
     match config.log_type {
         LogType::Console => Ok(Box::new(ConsoleOutput {})),
@@ -550,7 +559,18 @@ pub fn create_log_output(config: &LogConfig) -> Result<Box<dyn LogOutput>, Strin
     }
 }
 
-// New factory function for async log outputs
+/// Creates an asynchronous log output based on configuration
+///
+/// # Parameters
+/// - `config`: The logger configuration containing output type and settings
+///
+/// # Returns
+/// - `Result<AsyncLogOutput, String>`: An enum variant containing the appropriate output implementation
+///
+/// This function creates the appropriate AsyncLogOutput variant (Console, File, or Http)
+/// for non-blocking asynchronous logging operations based on the configured log_type.
+/// The returned object can be used with Tokio to perform logging operations without
+/// blocking the main application thread.
 pub fn create_async_log_output(config: &LogConfig) -> Result<AsyncLogOutput, String> {
     match config.log_type {
         LogType::Console => Ok(AsyncLogOutput::Console(ConsoleOutput {})),

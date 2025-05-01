@@ -1,25 +1,25 @@
 /*
- * Test application for the logging library
+ * Test application for Rusty Logger v2
  * 
- * This application demonstrates and tests various logging features:
- * - Basic logging at different levels
- * - Using procedural macros for aspect-oriented logging
- * - Testing retry behavior and error handling
- * - Performance measurements
- * - Circuit breaker pattern
+ * This comprehensive test suite demonstrates and validates:
+ * - Basic synchronous logging at all severity levels (debug, info, warn, error)
+ * - Asynchronous logging with high message volume
+ * - Over 20 procedural macros for automatic context capturing
+ * - Performance monitoring and instrumentation capabilities
+ * - Advanced patterns like circuit breaker, retry logic, and log throttling
  * 
- * Each test function demonstrates a specific logging feature using
- * the procedural macros from the liblogger_macros crate.
+ * All tests use the same app_config.toml for configuration to ensure
+ * consistent testing across synchronous and asynchronous logging paths.
  */
 
 use liblogger::{Logger, log_info, log_warn, log_error, log_debug};
 use liblogger_macros::*;
 use rand::Rng;
 
-// Import helper functions - renamed to better represent its purpose
+// Initialize helper functions required by the procedural macros
 initialize_logger_attributes!();
 
-// Add the async test module
+// Import the asynchronous logging test module
 mod async_test;
 use async_test::test_async_logger;
 

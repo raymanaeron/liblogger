@@ -92,6 +92,9 @@ impl Parse for MacroArgs {
                     Meta::NameValue(nv) => {
                         let ident = nv.path.get_ident().map(|i| i.to_string()).unwrap_or_default();
                         
+                        // Parse name-value pairs for attribute arguments 
+                        // Each supported parameter (max_attempts, rate, etc.) is parsed
+                        // from the attribute and stored in the MacroArgs struct
                         match ident.as_str() {
                             "max_attempts" => {
                                 if let Expr::Lit(expr_lit) = &nv.value {
@@ -118,7 +121,8 @@ impl Parse for MacroArgs {
                         }
                     },
                     Meta::Path(path) => {
-                        // Handle simple path arguments
+                        // Handle simple path arguments (without equals sign)
+                        // For example: #[macro_name(category)]
                         if let Some(ident) = path.get_ident() {
                             let name = ident.to_string();
                             if args.category.is_none() {
@@ -127,7 +131,8 @@ impl Parse for MacroArgs {
                         }
                     },
                     Meta::List(list) => {
-                        // Handle list arguments
+                        // Handle nested list arguments 
+                        // For example: #[macro_name(category(subcategory))]
                         if let Some(ident) = list.path.get_ident() {
                             let name = ident.to_string();
                             // Could handle more complex nested arguments if needed

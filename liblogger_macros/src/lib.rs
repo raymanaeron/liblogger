@@ -3,6 +3,9 @@
  *
  * This module provides procedural macros that can be applied to functions
  * for various logging, monitoring, and instrumentation purposes.
+ * 
+ * These macros work with the liblogger crate to provide automatic context
+ * capturing, timing measurements, and other advanced logging features.
  */
 
 extern crate proc_macro;
@@ -17,13 +20,39 @@ use syn::{parse_macro_input, parse_quote, ItemFn};
 // Import helpers from our utils module
 use crate::macro_utils::{get_fn_name, IdList, MacroArgs, define_helper_functions};
 
-/// Helper function to extract error from Result and other utility functions
+/// Initialization macro that must be called at the module level to enable attribute macros
+///
+/// This macro defines helper functions needed by the attribute macros, such as
+/// error extraction, success checking, trace ID management, and feature flag checking.
+///
+/// # Example
+/// ```
+/// use liblogger_macros::*;
+///
+/// // Call at module level (usually at the top of your file)
+/// initialize_logger_attributes!();
+/// ```
 #[proc_macro]
 pub fn initialize_logger_attributes(_input: TokenStream) -> TokenStream {
     TokenStream::from(define_helper_functions())
 }
 
-/// Log entry and exit of a function
+/// Logs function entry and exit points to track execution flow
+///
+/// Automatically adds INFO level logs at the start and end of the function.
+/// Useful for tracing code execution paths during debugging and in production.
+///
+/// # Example
+/// ```
+/// #[log_entry_exit]
+/// fn process_data(user_id: &str) {
+///     // Function implementation
+/// }
+/// ```
+///
+/// # Generated logs
+/// - "ENTRY: process_data"
+/// - "EXIT: process_data"
 #[proc_macro_attribute]
 pub fn log_entry_exit(_args: TokenStream, input: TokenStream) -> TokenStream {
     let mut input_fn = parse_macro_input!(input as ItemFn);

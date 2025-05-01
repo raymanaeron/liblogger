@@ -1,10 +1,11 @@
 /*
- * Logger implementation module
+ * Logger implementation module for Rusty Logger v2
  * 
  * This file implements the core Logger functionality which includes:
  * - Creation and initialization of the global logger instance
  * - Configuration of the logger from TOML files or programmatically
- * - Methods for logging messages at different severity levels
+ * - Asynchronous logging through Tokio with message passing
+ * - Automatic fallback to synchronous logging when needed
  * - Thread-safe logging with proper synchronization
  * 
  * The Logger uses a singleton pattern with lazy initialization via OnceCell
@@ -45,11 +46,16 @@ struct LoggerInner {
     output: Option<Box<dyn LogOutput>>,
     // Channel sender for async logging
     async_sender: Option<Sender<LogMessage>>,
-    // Flag to indicate if async logging is enabled
+    /// Flag to indicate if asynchronous logging is enabled
+    /// When false, all logging operations will be synchronous
     async_enabled: bool,
 }
 
 impl LoggerInner {
+    /// Creates a new uninitialized logger inner structure
+    /// 
+    /// This is called internally when first creating the logger instance.
+    /// All logs will go to stderr until properly initialized with a configuration.
     fn new() -> Self {
         LoggerInner {
             initialized: false,
@@ -60,6 +66,20 @@ impl LoggerInner {
         }
     }
 
+    /// Initializes the logger with the provided configuration
+    /// 
+    /// Sets up:
+    /// 1. Configuration settings and log threshold
+    /// 2. Synchronous output for fallback operations
+    /// 3. Tokio runtime for asynchronous logging
+    /// 4. Message channel for non-blocking log operations
+    /// 5. Background task for processing log messages
+    ///
+    /// # Parameters
+    /// - `config`: LogConfig containing all logger settings
+    /// 
+    /// # Returns
+    /// - `Result<(), String>`: Success or error message
     fn init_with_config(&mut self, config: LogConfig) -> Result<(), String> {
         self.config = Some(config.clone());
         

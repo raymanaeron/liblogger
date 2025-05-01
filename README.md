@@ -366,7 +366,7 @@ fn main() {
 
 ---
 
-## 9. Examples from the Codebase
+## 9. Usage Examples
 
 ### Basic Initialization Pattern
 
