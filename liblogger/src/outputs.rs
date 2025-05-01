@@ -311,27 +311,36 @@ impl AsyncLogOutputTrait for AsyncLogOutput {
 }
 
 /// Creates a synchronous log output based on configuration
-///
-/// # Parameters
-/// - `log_type`: The logger configuration containing output type and settings
-///
-/// # Returns
-/// - `Result<Box<dyn LogOutput>, String>`: A boxed trait object implementing LogOutput or an error message
-///
-/// This function creates the appropriate LogOutput implementation (Console, File, or Http)
-/// based on the log_type specified in the configuration.
 pub fn create_log_output(log_type: &LogType) -> Result<Box<dyn LogOutput>, String> {
     match log_type {
         LogType::Console => Ok(Box::new(ConsoleOutput::new())),
         LogType::File => {
-            // Get the config instance to retrieve force_flush and file_path settings
+            // Get the config instance to retrieve settings
             let config = LogConfig::get_instance()?;
-            let file_path = &config.file_path.as_ref().ok_or_else(|| 
-                "File path not specified in configuration".to_string())?;
+            
+            // Get file path and combine with log folder if specified
+            let file_path = config.file_path.as_ref()
+                .ok_or_else(|| "File path not specified in configuration".to_string())?;
+                
+            // Construct the full path using the log_folder if provided
+            let full_path = if let Some(folder) = &config.log_folder {
+                // Create the log directory if it doesn't exist
+                std::fs::create_dir_all(folder)
+                    .map_err(|e| format!("Failed to create log directory '{}': {}", folder, e))?;
+                
+                // Use platform-specific path separator
+                let path = Path::new(folder).join(file_path);
+                path.to_string_lossy().into_owned()
+            } else {
+                file_path.clone()
+            };
+            
+            println!("Creating log file at: {}", full_path);
+            
             // Use the force_flush directly since it's already a bool
             let force_flush = config.force_flush;
             
-            let (file_output, _) = create_file_output(file_path, force_flush)?;
+            let (file_output, _) = create_file_output(&full_path, force_flush)?;
             Ok(Box::new(file_output))
         },
         LogType::Http => {
@@ -346,29 +355,34 @@ pub fn create_log_output(log_type: &LogType) -> Result<Box<dyn LogOutput>, Strin
 }
 
 /// Creates an asynchronous log output based on configuration
-///
-/// # Parameters
-/// - `log_type`: The logger configuration containing output type and settings
-///
-/// # Returns
-/// - `Result<AsyncLogOutput, String>`: An enum variant containing the appropriate output implementation
-///
-/// This function creates the appropriate AsyncLogOutput variant (Console, File, or Http)
-/// for non-blocking asynchronous logging operations based on the configured log_type.
-/// The returned object can be used with Tokio to perform logging operations without
-/// blocking the main application thread.
 pub fn create_async_log_output(log_type: &LogType) -> Result<AsyncLogOutput, String> {
     match log_type {
         LogType::Console => Ok(AsyncLogOutput::Console(ConsoleOutput::new())),
         LogType::File => {
-            // Get the config instance to retrieve force_flush and file_path settings
+            // Get the config instance to retrieve settings
             let config = LogConfig::get_instance()?;
-            let file_path = &config.file_path.as_ref().ok_or_else(|| 
-                "File path not specified in configuration".to_string())?;
+            
+            // Get file path and combine with log folder if specified
+            let file_path = config.file_path.as_ref()
+                .ok_or_else(|| "File path not specified in configuration".to_string())?;
+                
+            // Construct the full path using the log_folder if provided
+            let full_path = if let Some(folder) = &config.log_folder {
+                // Create the log directory if it doesn't exist
+                std::fs::create_dir_all(folder)
+                    .map_err(|e| format!("Failed to create log directory '{}': {}", folder, e))?;
+                
+                // Use platform-specific path separator
+                let path = Path::new(folder).join(file_path);
+                path.to_string_lossy().into_owned()
+            } else {
+                file_path.clone()
+            };
+            
             // Use the force_flush directly since it's already a bool
             let force_flush = config.force_flush;
             
-            let (_, async_file_output) = create_file_output(file_path, force_flush)?;
+            let (_, async_file_output) = create_file_output(&full_path, force_flush)?;
             Ok(AsyncLogOutput::File(async_file_output))
         },
         LogType::Http => {
