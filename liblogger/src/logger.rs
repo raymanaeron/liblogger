@@ -13,7 +13,7 @@
  */
 
 use once_cell::sync::OnceCell;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, atomic::{AtomicU64, Ordering}};
 use std::path::Path;
 use chrono::Utc;
 use std::io::{self, Write};
@@ -55,6 +55,10 @@ struct LoggerInner {
     /// Flag to indicate if asynchronous logging is enabled
     /// When false, all logging operations will be synchronous
     async_enabled: bool,
+    /// Counter for messages dropped due to channel backpressure
+    dropped_logs: AtomicU64,
+    /// Counter to track when to report dropped logs
+    log_counter: AtomicU64,
 }
 
 impl LoggerInner {
@@ -66,6 +70,8 @@ impl LoggerInner {
             output: None,
             async_sender: None,
             async_enabled: false,
+            dropped_logs: AtomicU64::new(0),
+            log_counter: AtomicU64::new(0),
         }
     }
 
@@ -118,6 +124,14 @@ impl LoggerInner {
             // Format timestamp
             let timestamp = Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
             
+            // Increment log counter
+            let count = self.log_counter.fetch_add(1, Ordering::Relaxed) + 1;
+            
+            // Check if we need to report dropped logs (every 100 logs)
+            if count % 100 == 0 {
+                self.report_dropped_logs();
+            }
+            
             // Try async logging first if enabled
             if self.async_enabled {
                 if let Some(ref sender) = self.async_sender {
@@ -134,6 +148,9 @@ impl LoggerInner {
                     
                     // Send to the async channel as a LogCommand::Entry, fallback to sync if channel is full
                     if let Err(_) = sender.try_send(LogCommand::Entry(log_message)) {
+                        // Increment dropped logs counter before falling back to sync
+                        self.dropped_logs.fetch_add(1, Ordering::Relaxed);
+                        
                         // Channel full or closed, fallback to sync logging
                         self.log_sync(&timestamp, &level, message, context, file, line, module);
                     }
@@ -149,6 +166,28 @@ impl LoggerInner {
             // Fallback to stderr for uninitialized logger
             let timestamp = Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
             self.log_sync(&timestamp, &level, message, context, file, line, module);
+        }
+    }
+    
+    /// Report dropped logs if any
+    fn report_dropped_logs(&mut self) {
+        let dropped = self.dropped_logs.load(Ordering::Relaxed);
+        if dropped > 0 {
+            // Reset the counter first to avoid multiple reports of the same drops
+            let actual_dropped = self.dropped_logs.swap(0, Ordering::Relaxed);
+            
+            // Log a warning about dropped messages
+            let timestamp = Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+            let warning_message = format!("WARNING: {} log messages were dropped due to backpressure", actual_dropped);
+            self.log_sync(
+                &timestamp, 
+                &LogLevel::Warn, 
+                &warning_message, 
+                None,
+                "logger.rs",
+                0,
+                "liblogger"
+            );
         }
     }
 
@@ -318,7 +357,10 @@ impl Logger {
         if let Some(rt) = RUNTIME.get() {
             // Check if we have an async logger initialized
             if let Some(logger) = LOGGER_INSTANCE.get() {
-                if let Ok(logger_guard) = logger.lock() {
+                if let Ok(mut logger_guard) = logger.lock() {
+                    // Report any dropped logs before shutdown
+                    logger_guard.report_dropped_logs();
+                    
                     if logger_guard.async_enabled {
                         if let Some(sender) = &logger_guard.async_sender {
                             // Create a oneshot channel for completion notification
@@ -383,6 +425,16 @@ impl Logger {
             println!("No async logger to shutdown");
             Ok(())
         }
+    }
+    
+    /// Get the number of dropped log messages due to backpressure
+    pub fn get_dropped_log_count() -> u64 {
+        if let Some(logger) = LOGGER_INSTANCE.get() {
+            if let Ok(logger_guard) = logger.lock() {
+                return logger_guard.dropped_logs.load(Ordering::Relaxed);
+            }
+        }
+        0
     }
 }
 
