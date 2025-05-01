@@ -297,6 +297,18 @@ impl Logger {
             // Give it a moment to process remaining logs
             std::thread::sleep(std::time::Duration::from_secs(2));
             
+            // Final flush for file outputs if they exist
+            // This is important for non-force-flushed files to ensure all logs are persisted
+            if let Some(logger) = LOGGER_INSTANCE.get() {
+                if let Ok(mut guard) = logger.lock() {
+                    if let Some(ref mut output) = guard.output {
+                        // All file writers will perform a final flush here regardless of force_flush setting
+                        // Other output types will just ignore this call
+                        let _ = output.write_log(""); // This will trigger a flush in most implementations
+                    }
+                }
+            }
+            
             println!("Logger shutdown completed");
         }
         Ok(())

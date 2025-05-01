@@ -79,14 +79,15 @@ impl AsyncLogOutputTrait for ConsoleOutput {
     }
 }
 
-// Update the FileOutput struct to use a single shared file handle
+// Update the FileOutput struct to include force_flush flag
 pub struct FileOutput {
     file_handle: Arc<Mutex<File>>,
+    force_flush: bool,
 }
 
 impl FileOutput {
     #[allow(dead_code)]
-    pub fn new(file_path: &str) -> Result<Self, String> {
+    pub fn new(file_path: &str, force_flush: bool) -> Result<Self, String> {
         // Create directory if it doesn't exist
         if let Some(parent) = Path::new(file_path).parent() {
             if !parent.exists() {
@@ -106,6 +107,7 @@ impl FileOutput {
         
         Ok(FileOutput {
             file_handle,
+            force_flush,
         })
     }
 }
@@ -121,22 +123,26 @@ impl LogOutput for FileOutput {
         file.write_all(b"\n")
             .map_err(|e| format!("Failed to write newline to log file: {}", e))?;
         
-        file.flush()
-            .map_err(|e| format!("Failed to flush log file: {}", e))?;
+        // Only flush immediately if force_flush is true
+        if self.force_flush {
+            file.flush()
+                .map_err(|e| format!("Failed to flush log file: {}", e))?;
+        }
         
         Ok(())
     }
 }
 
-// Update AsyncFileOutput to use the shared file handle
+// Update AsyncFileOutput to include force_flush flag
 pub struct AsyncFileOutput {
     file_handle: Arc<Mutex<File>>,
+    force_flush: bool,
 }
 
 // Implementation of AsyncFileOutput
 impl AsyncFileOutput {
     #[allow(dead_code)]
-    pub fn new(file_path: &str) -> Result<Self, String> {
+    pub fn new(file_path: &str, force_flush: bool) -> Result<Self, String> {
         // Create directory if it doesn't exist
         if let Some(parent) = Path::new(file_path).parent() {
             if !parent.exists() {
@@ -156,6 +162,7 @@ impl AsyncFileOutput {
         
         Ok(AsyncFileOutput {
             file_handle,
+            force_flush,
         })
     }
 }
@@ -171,16 +178,19 @@ impl AsyncLogOutputTrait for AsyncFileOutput {
             .map_err(|e| format!("Failed to write to log file: {}", e))?;
         file.write_all(b"\n")
             .map_err(|e| format!("Failed to write newline to log file: {}", e))?;
-            
-        file.flush()
-            .map_err(|e| format!("Failed to flush log file: {}", e))?;
-            
+        
+        // Only flush immediately if force_flush is true
+        if self.force_flush {
+            file.flush()
+                .map_err(|e| format!("Failed to flush log file: {}", e))?;
+        }
+        
         Ok(())
     }
 }
 
-// Create shared factory function for file outputs
-pub fn create_file_output(file_path: &str) -> Result<(FileOutput, AsyncFileOutput), String> {
+// Update the create_file_output function to include force_flush
+pub fn create_file_output(file_path: &str, force_flush: bool) -> Result<(FileOutput, AsyncFileOutput), String> {
     // Open the file once 
     let file = OpenOptions::new()
         .create(true)
@@ -191,13 +201,15 @@ pub fn create_file_output(file_path: &str) -> Result<(FileOutput, AsyncFileOutpu
     // Create shared file handle
     let file_handle = Arc::new(Mutex::new(file));
     
-    // Create both output instances with the same file handle
+    // Create both output instances with the same file handle and force_flush setting
     let file_output = FileOutput {
         file_handle: Arc::clone(&file_handle),
+        force_flush,
     };
     
     let async_file_output = AsyncFileOutput {
         file_handle,
+        force_flush,
     };
     
     Ok((file_output, async_file_output))
@@ -312,11 +324,14 @@ pub fn create_log_output(log_type: &LogType) -> Result<Box<dyn LogOutput>, Strin
     match log_type {
         LogType::Console => Ok(Box::new(ConsoleOutput::new())),
         LogType::File => {
-            // Assuming the config is properly updated to include file_path
+            // Get the config instance to retrieve force_flush and file_path settings
             let config = LogConfig::get_instance()?;
             let file_path = &config.file_path.as_ref().ok_or_else(|| 
                 "File path not specified in configuration".to_string())?;
-            let (file_output, _) = create_file_output(file_path)?;
+            // Use the force_flush directly since it's already a bool
+            let force_flush = config.force_flush;
+            
+            let (file_output, _) = create_file_output(file_path, force_flush)?;
             Ok(Box::new(file_output))
         },
         LogType::Http => {
@@ -327,7 +342,6 @@ pub fn create_log_output(log_type: &LogType) -> Result<Box<dyn LogOutput>, Strin
             let timeout = config.http_timeout_seconds.unwrap_or(30);
             Ok(Box::new(HttpOutput::new(endpoint, timeout)?))
         },
-        // Add more log types as needed
     }
 }
 
@@ -347,21 +361,23 @@ pub fn create_async_log_output(log_type: &LogType) -> Result<AsyncLogOutput, Str
     match log_type {
         LogType::Console => Ok(AsyncLogOutput::Console(ConsoleOutput::new())),
         LogType::File => {
-            // Assuming the config is properly updated to include file_path
+            // Get the config instance to retrieve force_flush and file_path settings
             let config = LogConfig::get_instance()?;
             let file_path = &config.file_path.as_ref().ok_or_else(|| 
                 "File path not specified in configuration".to_string())?;
-            let (_, async_file_output) = create_file_output(file_path)?;
+            // Use the force_flush directly since it's already a bool
+            let force_flush = config.force_flush;
+            
+            let (_, async_file_output) = create_file_output(file_path, force_flush)?;
             Ok(AsyncLogOutput::File(async_file_output))
         },
         LogType::Http => {
-            // Assuming the config is properly updated to include http_endpoint and http_timeout_seconds
+            // Get the config instance to retrieve HTTP settings
             let config = LogConfig::get_instance()?;
             let endpoint = &config.http_endpoint.as_ref().ok_or_else(|| 
                 "HTTP endpoint not specified in configuration".to_string())?;
             let timeout = config.http_timeout_seconds.unwrap_or(30);
             Ok(AsyncLogOutput::Http(HttpOutput::new(endpoint, timeout)?))
         },
-        // Add more log types as needed
     }
 }

@@ -121,10 +121,18 @@ pub struct LogConfig {
     /// Whether to use async logging (default: true)
     #[serde(default = "default_async_logging")]
     pub async_logging: bool,
+    
+    /// Whether to force flush after every write (default: false)
+    #[serde(default = "default_force_flush")]
+    pub force_flush: bool,
 }
 
 fn default_async_logging() -> bool {
     true
+}
+
+fn default_force_flush() -> bool {
+    false  // Default to false for better performance
 }
 
 impl Default for LogConfig {
@@ -138,6 +146,7 @@ impl Default for LogConfig {
             http_endpoint: None,
             http_timeout_seconds: None,
             async_logging: true,
+            force_flush: false,
         }
     }
 }
