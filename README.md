@@ -1,4 +1,4 @@
-# Rusty Logger
+# liblogger - a professional logging crate for rust language
 
 ## 1. Problem Statement
 
