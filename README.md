@@ -21,17 +21,17 @@ Logging serves multiple critical functions in software development:
 Despite its importance, implementing effective logging remains challenging:
 
 #### For Developers:
-- **Inconsistency**: Without a standardized approach, logging becomes inconsistent across a codebase, especially with multiple contributors.
-- **Verbosity vs. Signal**: Too little logging leaves you blind; too much creates noise that obscures important information.
+- **Inconsistency**: Logging becomes inconsistent across a codebase without a standardized approach, especially with multiple contributors.
+- **Verbosity vs. Signal**: Too little logging leaves you blind; too much creates noise that obscures essential information.
 - **Context Loss**: Logs without sufficient context (like function parameters, return values, or system state) are often useless for debugging.
-- **Repetitive Boilerplate**: Adding proper context, error handling, and formatting to logs requires repetitive code that clutters business logic.
+- **Repetitive Boilerplate**: Adding proper context, error handling, and log formatting requires repetitive code that clutters business logic.
 - **Performance Concerns**: Developers often avoid comprehensive logging due to fears about performance impact, especially on hot paths.
 
 #### For Operations and SRE Teams:
 - **Inconsistent Formats**: Varying log formats make automated parsing and alerting difficult.
-- **Missing Correlation IDs**: Without identifiers linking related logs across distributed systems, tracing request flows becomes nearly impossible.
+- **Missing Correlation IDs**: Tracing request flows becomes nearly impossible without identifiers linking related logs across distributed systems.
 - **Insufficient Detail**: Logs that lack timing information, component identifiers, or error specifics hinder incident response.
-- **Log Loss**: Under high load or during crashes, critical log messages may be lost before being persisted.
+- **Log Loss**: Critical log messages may be lost before being persisted under high load or during crashes.
 - **Noisy Alerts**: Poorly configured logging can trigger unnecessary alerts, leading to alert fatigue.
 
 ### Technical Challenges in Rust
@@ -47,20 +47,20 @@ Beyond these common issues, Rust developers face additional challenges:
 As applications scale and mature, additional concerns emerge:
 
 - **Dual-State Logging**: Synchronous and asynchronous logging paths can lead to file corruption when both write to the same file without coordination.
-- **Buffer Flushing**: Logs may remain in memory buffers during unexpected terminations if not reliably flushed.
+- **Buffer Flushing**: Logs may remain in memory buffers if not reliably flushed during unexpected terminations.
 - **Shutdown Procedures**: Inadequate shutdown can result in lost messages when an application exits normally.
 - **Backpressure Handling**: High-volume logging can overwhelm message channels, leading to silent log loss without visibility.
 - **Type Flexibility**: Logging macros that rely on reflection for error handling often break when faced with custom error types.
 
-The Rusty Logger v2 Framework addresses these challenges by providing a structured, consistent logging approach that integrates seamlessly with Rust's idioms. It eliminates boilerplate through procedural macros, ensures reliable log delivery with proper backpressure handling, and maintains performance through asynchronous processing—all while providing the context and format consistency needed for effective debugging and monitoring.
+The liblogger Framework addresses these challenges by providing a structured, consistent logging approach that integrates seamlessly with Rust's idioms. It eliminates boilerplate through procedural macros, ensures reliable log delivery with proper backpressure handling, and maintains performance through asynchronous processing—all while providing the context and format consistency needed for effective debugging and monitoring.
 
 ---
 
 ## 2. Architecture Overview
 
-### How Rusty Logger v2 Addresses Your Challenges
+### How liblogger Addresses Your Challenges
 
-Rusty Logger v2 was designed to solve the specific challenges developers face with logging:
+liblogger was designed to solve the specific challenges developers face with logging:
 
 | Your Challenge | Our Solution |
 |---------------|--------------|
@@ -75,7 +75,7 @@ Rusty Logger v2 was designed to solve the specific challenges developers face wi
 
 ### Core Components
 
-Rusty Logger v2 is structured around four primary components that work together to provide a robust logging experience:
+liblogger is structured around four primary components that work together to provide a robust logging experience:
 
 #### 1. The Logger Facade
 
@@ -132,7 +132,7 @@ Behind the scenes, Rusty Logger implements two processing paths:
 
 ### Advanced Features
 
-Building on this foundation, Rusty Logger v2 includes production-grade capabilities:
+Building on this foundation, liblogger includes production-grade capabilities:
 
 #### Procedural Macros for Automatic Context
 
@@ -152,7 +152,7 @@ The file output system uses a shared file handle between synchronous and asynchr
 
 #### Controlled Flush Behavior
 
-The `force_flush` configuration option determines whether logs are immediately persisted to disk after writing. This gives you control over the performance vs. reliability tradeoff based on the criticality of your logs.
+The `force_flush` configuration option determines whether logs immediately persist to disk after writing. This gives you control over the performance vs. reliability tradeoff based on the criticality of your logs.
 
 #### Safe Shutdown Protocol
 
@@ -179,7 +179,7 @@ This approach works with any `Result<T, E>` type without compromising type safet
 
 The logger tracks messages that couldn't be processed asynchronously using atomic counters, providing visibility into potential log loss and helping you tune your logging volume or channel capacity.
 
-By combining these components and features, Rusty Logger v2 provides a logging framework that's both easy to use and production-ready, addressing the full spectrum of logging challenges faced by Rust developers.
+By combining these components and features, liblogger provides a logging framework that's both easy to use and production-ready, addressing the full spectrum of logging challenges faced by Rust developers.
 
 ---
 
@@ -346,7 +346,7 @@ log_info!("Feature accessed", context);
 
 ### Logging in Asynchronous Code
 
-Rusty Logger v2 seamlessly supports asynchronous code:
+liblogger seamlessly supports asynchronous code:
 
 ```rust
 async fn process_data(user_id: &str) -> Result<(), Error> {
@@ -581,7 +581,7 @@ This guarantees that logs are flushed to disk immediately after each write, prev
 - **Log Level Filtering**: Log messages below the configured threshold are filtered early to minimize overhead.
 - **Channel Buffering**: The async logger uses a buffered channel (1024 messages) to handle bursts of log activity.
 - **Fallback Mechanism**: If the async channel is full, the logger falls back to synchronous logging.
-- **Controlled Flushing**: The `force_flush` option allows balancing between performance (deferred flushing) and reliability (immediate flushing).
+- **Controlled Flushing**: The `force_flush` option balances performance (deferred flushing) and reliability (immediate flushing).
 - **Backpressure Monitoring**: The system tracks and reports when log messages are dropped due to channel saturation.
 - **Unified File Writer**: Both sync and async operations share a single file handle for improved efficiency and consistency.
 
