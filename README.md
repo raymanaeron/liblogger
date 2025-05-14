@@ -1,5 +1,3 @@
-# liblogger - a professional logging crate for rust language
-
 ## 1. Problem Statement
 
 Every developer has faced those moments: a production issue occurs, and you're left digging through sparse logs trying to piece together what happened. Or worse, finding no relevant logs at all. 
@@ -699,10 +697,3 @@ fn record_financial_transaction(transaction: &Transaction) -> Result<(), String>
 5. **Shutdown Issues**: If logs are missing at program exit, ensure you call `shutdown_logger()`.
 6. **Dropped Messages**: If `Logger::get_dropped_log_count()` reports dropped messages, consider increasing the channel capacity or reducing log volume.
 7. **File Flushing**: For critical logs that must survive crashes, set `force_flush = true` in your configuration.
-
-### Getting Help
-
-If you encounter issues not covered here, please open an issue on the GitHub repository with:
-- Your configuration settings
-- Code samples demonstrating the issue
-- Expected vs. actual behavior
