@@ -259,28 +259,6 @@ async fn process_payment(payment: PaymentRequest) -> Result<Receipt, PaymentErro
 - **Throttling**: Built-in rate limiting prevents log flooding
 - **Non-blocking**: Logging operations don't block application execution
 
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                          Application Code                       │
-├─────────────────────────────────────────────────────────────────┤
-│                     Procedural Macros                           │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐│
-│  │   DevOps    │ │ Distributed │ │  Security   │ │  Business   ││
-│  │    Infra    │ │   Systems   │ │    &        │ │    Logic    ││
-│  │ Monitoring  │ │ Monitoring  │ │ Compliance  │ │ Monitoring  ││
-│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘│
-├─────────────────────────────────────────────────────────────────┤
-│                      LibLogger Core                             │
-│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐ ┌─────────────┐│
-│  │   Logging   │ │  Context    │ │   Output    │ │    Utils    ││
-│  │    API      │ │ Management  │ │   Sinks     │ │     &       ││
-│  │             │ │             │ │             │ │  Helpers    ││
-│  └─────────────┘ └─────────────┘ └─────────────┘ └─────────────┘│
-└─────────────────────────────────────────────────────────────────┘
-```
-
 ## Integration Examples
 
 ### With Popular Crates
