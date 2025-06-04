@@ -38,30 +38,48 @@ uuid = "1.0"         # For distributed tracing
 
 ### Basic Logging
 
+First, initialize the logger, then use the core logging macros:
+
 ```rust
 use liblogger::*;
 
 fn main() {
-    // Basic logging
-    log_info!("Application started");
-    log_warn!("This is a warning", Some("context=startup".to_string()));
-    log_error!("Error occurred", None);
+    // Initialize the logger
+    Logger::init(); // or Logger::init_with_config_file("config.toml")
     
-    // With context
-    log_debug!(
+    // Core logging macros - available immediately after initialization
+    log_debug!("Debug message for development");
+    log_info!("Application started successfully"); 
+    log_warn!("This is a warning message");
+    log_error!("Error occurred during processing");
+    
+    // Logging with context
+    log_info!(
         "Processing user request", 
         Some("user_id=123,action=login".to_string())
+    );
+    
+    log_warn!(
+        "High memory usage detected", 
+        Some("memory_usage=85%,threshold=80%".to_string())
+    );
+    
+    log_error!(
+        "Database connection failed", 
+        Some("host=localhost,port=5432,retry_count=3".to_string())
     );
 }
 ```
 
 ### Procedural Macros
 
+For advanced instrumentation, add the procedural macros:
+
 ```rust
 use liblogger::*;
 use liblogger_macros::*;
 
-// Required initialization
+// Required initialization for procedural macros
 initialize_logger_attributes!();
 
 // Basic function instrumentation
@@ -69,6 +87,7 @@ initialize_logger_attributes!();
 #[measure_time]
 fn process_user_data(user_id: u64) {
     // Function automatically logs entry, exit, and execution time
+    log_info!(&format!("Processing data for user {}", user_id));
 }
 
 // Advanced monitoring with multiple macros
@@ -78,6 +97,7 @@ fn process_user_data(user_id: u64) {
 #[audit_log]
 async fn critical_operation() -> Result<(), Error> {
     // Monitors disk usage, memory, implements retries, and creates audit logs
+    log_info!("Executing critical operation");
     Ok(())
 }
 
@@ -87,6 +107,7 @@ async fn critical_operation() -> Result<(), Error> {
 #[circuit_breaker(failure_threshold = 5)]
 async fn external_api_call() -> Result<Response, ApiError> {
     // Monitors service communication, adds tracing, implements circuit breaker
+    log_info!("Making external API call");
     Ok(Response::default())
 }
 
@@ -95,9 +116,33 @@ async fn external_api_call() -> Result<Response, ApiError> {
 #[log_data_quality(domain = "product_data", threshold = 95)]
 fn calculate_price(product: &Product) -> Result<Price, BusinessError> {
     // Monitors business rule execution and data quality
+    log_info!("Calculating price for product");
     Ok(Price::default())
 }
 ```
+
+## Core Logging Macros
+
+### Available Immediately After Logger Initialization
+
+```rust
+// Basic logging - no setup required beyond Logger::init()
+log_debug!("Debug information for developers");
+log_info!("General information about application operation");
+log_warn!("Warning about potential issues");
+log_error!("Error conditions that should be investigated");
+
+// With context (optional second parameter)
+log_info!("User login", Some("user_id=123,ip=192.168.1.1".to_string()));
+log_error!("Database error", Some("table=users,operation=insert,error_code=23505".to_string()));
+```
+
+### Log Levels
+
+- **DEBUG**: Detailed information for diagnosing problems
+- **INFO**: General information about application operation
+- **WARN**: Warning messages for potentially harmful situations
+- **ERROR**: Error conditions that should be investigated
 
 ## Comprehensive Macro Categories
 
@@ -283,7 +328,7 @@ fn traced_operation() {
 
 ## Contributing
 
-We welcome contributions!
+We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ### Adding New Macros
 
@@ -291,3 +336,44 @@ We welcome contributions!
 2. Add utility functions in `liblogger_macros/src/macro_utils.rs`
 3. Write tests in `logger_tests/src/`
 4. Update documentation in `proc_macros.md`
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## Roadmap
+
+- [ ] **Async Improvements**: Better async/await support across all macros
+- [ ] **Custom Sinks**: Pluggable output destinations (Elasticsearch, Kafka, etc.)
+- [ ] **Configuration Management**: Runtime configuration of macro behavior
+- [ ] **Performance Optimizations**: Zero-cost abstractions for hot paths
+- [ ] **Cloud Integration**: Native support for AWS CloudWatch, GCP Logging
+- [ ] **AI/ML Integration**: Intelligent anomaly detection and pattern recognition
+- [ ] **Visual Dashboards**: Web-based monitoring and alerting interface
+
+## Examples
+
+Check out the `examples/` directory for comprehensive usage examples:
+
+- `basic_usage.rs` - Getting started with core logging
+- `macro_showcase.rs` - Demonstration of all available macros
+- `microservice_example.rs` - Full microservice with comprehensive monitoring
+- `performance_monitoring.rs` - Performance-focused instrumentation
+- `security_auditing.rs` - Security and compliance logging examples
+
+## Support
+
+- Documentation: https://docs.rs/liblogger
+- Issue Tracker: https://github.com/yourusername/liblogger/issues
+- Discussions: https://github.com/yourusername/liblogger/discussions
+- Email Support: support@liblogger.dev
+
+## Acknowledgments
+
+- Inspired by the observability needs of modern distributed systems
+- Built on the shoulders of the excellent Rust ecosystem
+- Special thanks to the Rust macro system that makes this level of instrumentation possible
+
+---
+
+*LibLogger - Making Rust applications observable, one function at a time.*
