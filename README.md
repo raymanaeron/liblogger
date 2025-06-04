@@ -101,7 +101,7 @@ fn calculate_price(product: &Product) -> Result<Price, BusinessError> {
 
 ## Comprehensive Macro Categories
 
-### 🔧 Basic Instrumentation
+### Basic Instrumentation
 - `#[log_entry_exit]` - Function entry/exit logging
 - `#[log_args(arg1, arg2)]` - Argument logging
 - `#[log_response]` - Return value logging
@@ -113,13 +113,13 @@ fn calculate_price(product: &Product) -> Result<Price, BusinessError> {
 - `#[log_concurrency]` - Concurrent execution tracking
 - `#[dependency_latency(target = "db")]` - External dependency timing
 
-### 🛡️ Error Handling & Resilience
+### Error Handling & Resilience
 - `#[log_errors]` - Automatic error logging
 - `#[log_retries(max_attempts = 3)]` - Retry logic with logging
 - `#[circuit_breaker(failure_threshold = 5)]` - Circuit breaker pattern
 - `#[catch_panic]` - Panic recovery and logging
 
-### 🏗️ DevOps Infrastructure (15+ macros)
+### DevOps Infrastructure (15+ macros)
 - `#[log_disk_usage(threshold = 85)]` - Disk space monitoring
 - `#[log_network_connectivity(endpoint = "api.com")]` - Network health
 - `#[log_database_pool(pool_name = "primary")]` - Connection pool monitoring
@@ -127,7 +127,7 @@ fn calculate_price(product: &Product) -> Result<Price, BusinessError> {
 - `#[log_queue_depth(queue_name = "tasks")]` - Message queue monitoring
 - `#[log_file_descriptors(threshold = 1000)]` - Resource leak detection
 
-### 🌐 Distributed Systems (10+ macros)
+### Distributed Systems (10+ macros)
 - `#[log_transaction(domain = "payment")]` - Transaction monitoring
 - `#[log_service_communication(service_name = "api")]` - Inter-service calls
 - `#[log_consensus_operation(domain = "raft")]` - Consensus algorithm monitoring
@@ -135,19 +135,19 @@ fn calculate_price(product: &Product) -> Result<Price, BusinessError> {
 - `#[log_distributed_lock(domain = "resources")]` - Distributed locking
 - `#[log_trace_correlation(service_name = "gateway")]` - Distributed tracing
 
-### 🔒 Security & Compliance (8+ macros)
+### Security & Compliance (8+ macros)
 - `#[log_security_event(warning_level = "high")]` - Security event logging
 - `#[log_access_control(domain = "admin")]` - Access control monitoring
 - `#[log_compliance_check(domain = "gdpr")]` - Compliance validation
 - `#[log_crypto_operation(domain = "encryption")]` - Crypto operation auditing
 - `#[audit_log]` - Comprehensive audit trails
 
-### 💼 Business Logic (5+ macros)
+### Business Logic (5+ macros)
 - `#[log_business_rule(domain = "pricing")]` - Business rule monitoring
 - `#[log_data_quality(domain = "customer_data")]` - Data quality checks
 - `#[log_workflow_step(domain = "order_flow")]` - Workflow monitoring
 
-### 📊 Advanced Analytics (5+ macros)
+### Advanced Analytics (5+ macros)
 - `#[log_anomaly_detection(service_name = "api")]` - Anomaly detection
 - `#[log_custom_metrics(metric_name = "kpi")]` - Custom metrics collection
 - `#[log_health_check(service_name = "api")]` - Health monitoring
