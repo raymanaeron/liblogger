@@ -13,6 +13,8 @@ This document describes all the procedural macros available in the `liblogger_ma
 - [Advanced Analytics Macros](#advanced-analytics-macros)
 - [Security & Compliance Macros](#security--compliance-macros)
 - [Business Logic Macros](#business-logic-macros)
+- [Configuration & Infrastructure Macros](#configuration--infrastructure-macros)
+- [Utility & Context Macros](#utility--context-macros)
 
 ## Setup
 
@@ -124,6 +126,16 @@ Measures latency to external dependencies.
 #[dependency_latency(target = "redis")]
 fn cache_lookup() -> Result<String, Error> {
     // Logs dependency call timing and success/failure
+}
+```
+
+### `#[throttle_log(rate = 5)]`
+Throttles log output to prevent flooding during incidents.
+
+```rust
+#[throttle_log(rate = 10)]
+fn high_frequency_operation() {
+    // Limits logging to 10 messages per minute
 }
 ```
 
@@ -574,15 +586,83 @@ fn versioned_operation() {
 }
 ```
 
-### `#[throttle_log(rate = 5)]`
-Throttles log output to prevent flooding during incidents.
+## Complete Macro List
 
-```rust
-#[throttle_log(rate = 10)]
-fn high_frequency_operation() {
-    // Limits logging to 10 messages per minute
-}
-```
+Here's a comprehensive list of all 50+ available procedural macros:
+
+### Basic & Core Macros
+1. `initialize_logger_attributes!()` - Required initialization macro
+2. `#[log_entry_exit]` - Entry/exit logging
+3. `#[log_args(...)]` - Argument logging
+4. `#[log_response]` - Return value logging
+5. `#[log_result(...)]` - Result-specific logging with levels
+
+### Performance & Monitoring (7 macros)
+6. `#[measure_time]` - Execution timing
+7. `#[log_memory_usage]` - Memory monitoring
+8. `#[log_cpu_time]` - CPU time tracking
+9. `#[log_concurrency]` - Concurrency tracking
+10. `#[dependency_latency(...)]` - External dependency timing
+11. `#[throttle_log(...)]` - Log rate limiting
+12. `#[metrics_counter(...)]` - Prometheus counter integration
+
+### Error Handling & Resilience (5 macros)
+13. `#[log_errors]` - Error and panic logging
+14. `#[log_retries(...)]` - Retry logic with logging
+15. `#[circuit_breaker(...)]` - Circuit breaker pattern
+16. `#[catch_panic]` - Panic recovery
+17. `#[health_check]` - Health check logging
+
+### DevOps Infrastructure (8 macros)
+18. `#[log_disk_usage(...)]` - Disk usage monitoring
+19. `#[log_network_connectivity(...)]` - Network connectivity checks
+20. `#[log_database_pool(...)]` - Database pool monitoring
+21. `#[log_file_descriptors(...)]` - File descriptor tracking
+22. `#[log_cache_hit_ratio(...)]` - Cache performance monitoring
+23. `#[log_queue_depth(...)]` - Message queue monitoring
+24. `#[log_gc_pressure(...)]` - Garbage collection monitoring
+25. `#[log_thread_pool_utilization(...)]` - Thread pool monitoring
+
+### Distributed Systems (6 macros)
+26. `#[log_transaction(...)]` - Transaction monitoring
+27. `#[log_service_communication(...)]` - Inter-service communication
+28. `#[log_consensus_operation(...)]` - Consensus algorithm monitoring
+29. `#[log_cluster_health(...)]` - Cluster health monitoring
+30. `#[log_distributed_lock(...)]` - Distributed lock monitoring
+31. `#[log_trace_correlation(...)]` - Distributed tracing
+
+### Advanced Analytics (4 macros)
+32. `#[log_anomaly_detection(...)]` - Anomaly detection
+33. `#[log_custom_metrics(...)]` - Custom metrics collection
+34. `#[log_health_check(...)]` - Comprehensive health monitoring
+
+### Security & Compliance (5 macros)
+35. `#[log_security_event(...)]` - Security event logging
+36. `#[log_compliance_check(...)]` - Compliance monitoring
+37. `#[log_access_control(...)]` - Access control monitoring
+38. `#[log_crypto_operation(...)]` - Cryptographic operation auditing
+39. `#[audit_log]` - Comprehensive audit trails
+
+### Business Logic (3 macros)
+40. `#[log_business_rule(...)]` - Business rule monitoring
+41. `#[log_data_quality(...)]` - Data quality monitoring
+42. `#[log_workflow_step(...)]` - Workflow step monitoring
+
+### Configuration & Infrastructure (8 macros)
+43. `#[log_config_change(...)]` - Configuration change monitoring
+44. `#[log_deployment(...)]` - Deployment monitoring
+45. `#[log_environment_validation(...)]` - Environment validation
+46. `#[log_feature_flag_change(...)]` - Feature flag monitoring
+47. `#[log_api_rate_limits(...)]` - API rate limit monitoring
+48. `#[log_ssl_certificate_expiry(...)]` - SSL certificate monitoring
+49. `#[log_service_discovery(...)]` - Service discovery monitoring
+50. `#[log_load_balancer_health(...)]` - Load balancer monitoring
+
+### Utility & Context (4 macros)
+51. `#[trace_span]` - Distributed tracing spans
+52. `#[feature_flag(...)]` - Feature flag state logging
+53. `#[request_context]` - Request context attachment
+54. `#[version_tag]` - Version information logging
 
 ## Best Practices
 
@@ -605,3 +685,29 @@ Some macros require additional dependencies:
 - `#[trace_span]`: Requires `uuid` crate
 
 Make sure to add these to your `Cargo.toml` when using the corresponding macros.
+
+## Macro Combinations
+
+You can combine multiple macros on a single function for comprehensive monitoring:
+
+```rust
+#[log_entry_exit]
+#[measure_time]
+#[log_errors]
+#[log_retries(max_attempts = 3)]
+#[log_disk_usage(threshold = 85)]
+#[audit_log]
+#[request_context]
+async fn critical_business_operation(data: &ProcessingData) -> Result<BusinessResult, ProcessingError> {
+    // This function has comprehensive monitoring:
+    // - Entry/exit logging
+    // - Execution timing
+    // - Error handling
+    // - Retry logic
+    // - Disk usage monitoring
+    // - Audit trail creation
+    // - Request context attachment
+}
+```
+
+This provides enterprise-grade observability with minimal code changes.
