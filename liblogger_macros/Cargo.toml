@@ -11,16 +11,5 @@ proc-macro2 = "1.0"
 quote = "1.0"
 syn = { version = "2.0", features = ["full", "extra-traits"] }
 uuid = { version = "1.4.1", features = ["v4"] }
-
-[features]
-default = []
-prometheus = ["dep:prometheus"]
-memory_usage = ["dep:psutil"]
-
-[dependencies.prometheus]
-version = "0.13"
-optional = true
-
-[dependencies.psutil]
-version = "3.2"
-optional = true
+prometheus = "0.13"
+psutil = "3.2"

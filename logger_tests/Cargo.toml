@@ -4,11 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-liblogger = { path = "../liblogger", features = ["proc_macros"] }
+liblogger = { path = "../liblogger" }
 liblogger_macros = { path = "../liblogger_macros" }
 rand = "0.8"
 uuid = { version = "1.4", features = ["v4"] }
-
-[features]
-prometheus = []
-memory_usage = []
+prometheus = "0.13"
+psutil = "3.2"

@@ -751,10 +751,8 @@ pub fn metrics_counter(args: TokenStream, input: TokenStream) -> TokenStream {
         
     let mut input_fn = parse_macro_input!(input as ItemFn);
     let orig_block = input_fn.block.clone();
-    
-    input_fn.block = Box::new(parse_quote!({
-        // Increment counter using Prometheus if available
-        #[cfg(feature = "prometheus")]
+      input_fn.block = Box::new(parse_quote!({
+        // Increment counter using Prometheus
         {
             use prometheus::{Counter, register_counter};
             use std::sync::Once;
@@ -786,9 +784,7 @@ pub fn log_memory_usage(_args: TokenStream, input: TokenStream) -> TokenStream {
     let mut input_fn = parse_macro_input!(input as ItemFn);
     let fn_name = get_fn_name(&input_fn);
     let orig_block = input_fn.block.clone();
-    
-    input_fn.block = Box::new(parse_quote!({
-        #[cfg(feature = "memory_usage")]
+      input_fn.block = Box::new(parse_quote!({
         let (start_rss, start_vms) = {
             use psutil::process::Process;
             let process = Process::current().unwrap();
@@ -798,7 +794,6 @@ pub fn log_memory_usage(_args: TokenStream, input: TokenStream) -> TokenStream {
         
         let result = #orig_block;
         
-        #[cfg(feature = "memory_usage")]
         {
             use psutil::process::Process;
             let process = Process::current().unwrap();

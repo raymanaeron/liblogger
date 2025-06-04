@@ -737,6 +737,8 @@ version = "0.1.0"
 dependencies = [
  "liblogger",
  "liblogger_macros",
+ "prometheus",
+ "psutil",
  "rand",
  "uuid",
 ]
