@@ -23,6 +23,10 @@ initialize_logger_attributes!();
 mod async_test;
 use async_test::test_async_logger;
 
+// Import the DevOps macro tests module  
+mod devops_macro_tests;
+use devops_macro_tests::run_all_devops_tests;
+
 fn main() {
     // Initialize the logger from default config file
     // Replace the default initialization with a custom one
@@ -93,6 +97,9 @@ fn main() {
     
     // Test the async logger
     test_async_logger();
+    
+    // Test all DevOps monitoring macros
+    run_all_devops_tests();
     
     log_info!("All tests completed!");
 }

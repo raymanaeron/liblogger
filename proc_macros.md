@@ -1,723 +1,607 @@
-# Procedural Macros Documentation
+# LibLogger Procedural Macros
 
-This document provides comprehensive documentation for all procedural macros available in the `liblogger_macros` crate. These macros provide automatic logging, monitoring, and instrumentation capabilities for Rust functions.
+This document describes all the procedural macros available in the `liblogger_macros` crate. These macros provide automatic instrumentation for functions with various logging, monitoring, and observability features.
 
-## Quick Start
+## Table of Contents
 
-### 1. Add Dependencies
+- [Setup](#setup)
+- [Basic Logging Macros](#basic-logging-macros)
+- [Performance & Monitoring Macros](#performance--monitoring-macros)
+- [Error Handling & Resilience Macros](#error-handling--resilience-macros)
+- [DevOps Infrastructure Macros](#devops-infrastructure-macros)
+- [Distributed Systems Macros](#distributed-systems-macros)
+- [Advanced Analytics Macros](#advanced-analytics-macros)
+- [Security & Compliance Macros](#security--compliance-macros)
+- [Business Logic Macros](#business-logic-macros)
 
-Add these dependencies to your `Cargo.toml`:
+## Setup
 
-```toml
-[dependencies]
-liblogger = { path = "../path/to/liblogger" }
-liblogger_macros = { path = "../path/to/liblogger_macros" }
-uuid = "1.0"  # Required for trace_span macro
-prometheus = "0.13"  # Required for metrics_counter macro
-psutil = "3.2"  # Required for log_memory_usage macro
-```
-
-### 2. Initialize in Your Code
-
-At the top of your source file, add:
+Before using any attribute macros, you must call the initialization macro at the module level:
 
 ```rust
 use liblogger_macros::*;
-use liblogger::{Logger, log_info, log_debug, log_warn, log_error};
+use liblogger;
 
-// Initialize the logger (call once at application startup)
-Logger::init();
-
-// Initialize macro support (must be at module level)
+// Required initialization - call this once per module
 initialize_logger_attributes!();
-```
 
-### 3. Apply Macros to Functions
-
-```rust
 #[log_entry_exit]
-#[measure_time]
 fn my_function() {
     // Your code here
 }
 ```
 
----
+## Basic Logging Macros
 
-## All Available Macros
-
-### 1. `initialize_logger_attributes!()`
-
-**Type**: Function-like macro (required)  
-**Purpose**: Defines helper functions needed by attribute macros  
-**Usage**: Must be called at module level before using any attribute macros
-
-```rust
-use liblogger_macros::*;
-
-initialize_logger_attributes!();
-```
-
----
-
-## Attribute Macros
-
-### 2. `log_entry_exit`
-
-**Purpose**: Logs function entry and exit points  
-**Parameters**: None  
-**Async Support**: Full support
+### `#[log_entry_exit]`
+Automatically logs function entry and exit points.
 
 ```rust
 #[log_entry_exit]
-fn process_data(user_id: &str) {
-    // Function implementation
-}
-
-#[log_entry_exit]
-async fn async_process_data(user_id: &str) {
-    // Async function implementation
+fn process_data() {
+    // Automatically logs: "ENTRY: process_data"
+    // ... your code ...
+    // Automatically logs: "EXIT: process_data"
 }
 ```
 
-**Generated Logs**:
-```
-ENTRY: process_data
-EXIT: process_data
-```
-
----
-
-### 3. `log_errors`
-
-**Purpose**: Automatically logs errors and panics from functions  
-**Parameters**: None  
-**Async Support**: Full support  
-**Works With**: Any `Result<T, E>` return type
+### `#[log_args(arg1, arg2)]`
+Logs specified function arguments at entry.
 
 ```rust
-#[log_errors]
-fn validate_input(data: &str) -> Result<(), ValidationError> {
-    if data.is_empty() {
-        return Err(ValidationError::Empty);
-    }
-    Ok(())
-}
-
-#[log_errors]
-async fn async_validate_input(data: &str) -> Result<(), ValidationError> {
-    // Async validation logic
-    Ok(())
+#[log_args(user_id, operation)]
+fn handle_request(user_id: u64, operation: &str, data: Vec<u8>) {
+    // Logs: "Entering handle_request with args: user_id = 123, operation = create"
 }
 ```
 
-**Generated Logs** (on error):
-```
-validate_input returned error: Empty
-```
-
----
-
-### 4. `measure_time`
-
-**Purpose**: Measures and logs function execution time  
-**Parameters**: None  
-**Async Support**: Full support
-
-```rust
-#[measure_time]
-fn generate_report() -> Report {
-    // Time-consuming operation
-    Report::new()
-}
-
-#[measure_time]
-async fn async_generate_report() -> Report {
-    // Async time-consuming operation
-    Report::new()
-}
-```
-
-**Generated Logs**:
-```
-generate_report completed in 1250 ms
-```
-
----
-
-### 5. `log_args`
-
-**Purpose**: Logs specified function arguments  
-**Parameters**: List of argument names to log  
-**Async Support**: Partial (no async detection, but works)
-
-```rust
-#[log_args(user_id, action)]
-fn audit_user_action(user_id: &str, action: &str, details: &ActionDetails) {
-    // Only user_id and action will be logged
-}
-```
-
-**Generated Logs**:
-```
-Entering audit_user_action with args: user_id = "12345", action = "delete_account"
-```
-
----
-
-### 6. `log_retries`
-
-**Purpose**: Implements retry logic with comprehensive logging  
-**Parameters**: `max_attempts=N` (default: 3)  
-**Async Support**: Full support (skips sleep delays)  
-**Works With**: Any `Result<T, E>` return type
-
-```rust
-#[log_retries(max_attempts=3)]
-fn connect_to_database() -> Result<Connection, DbError> {
-    // Function will be retried up to 3 times if it fails
-    database::connect()
-}
-
-#[log_retries(max_attempts=5)]
-async fn async_connect_to_api() -> Result<ApiResponse, ApiError> {
-    // Async retry with no sleep delays (implement your own if needed)
-    api_client::fetch_data().await
-}
-```
-
-**Generated Logs**:
-```
-Retry attempt 2 of 3 for connect_to_database
-connect_to_database attempt 1 failed: connection refused
-connect_to_database succeeded after 2 attempts
-```
-
----
-
-### 7. `audit_log`
-
-**Purpose**: Creates detailed audit logs for security-sensitive operations  
-**Parameters**: None  
-**Async Support**: Full support
-
-```rust
-#[audit_log]
-fn change_permissions(user_id: &str, new_role: Role) {
-    // Security-sensitive operation
-}
-
-#[audit_log]
-async fn async_change_permissions(user_id: &str, new_role: Role) {
-    // Async security-sensitive operation
-}
-```
-
-**Generated Logs**:
-```
-AUDIT: change_permissions called
-AUDIT: change_permissions completed in 45 ms
-```
-
----
-
-### 8. `circuit_breaker`
-
-**Purpose**: Implements circuit breaker pattern with failure tracking  
-**Parameters**: `failure_threshold=N` (default: 3)  
-**Async Support**: Full support  
-**Works With**: Any `Result<T, E>` return type
-
-```rust
-#[circuit_breaker(failure_threshold=5)]
-fn call_external_service() -> Result<Response, ServiceError> {
-    // Will stop calling after 5 consecutive failures
-    external_service::call()
-}
-
-#[circuit_breaker(failure_threshold=3)]
-async fn async_call_external_service() -> Result<Response, ServiceError> {
-    // Async circuit breaker
-    external_service::call().await
-}
-```
-
-**Generated Logs**:
-```
-Circuit breaker: call_external_service failed (3/5 failures)
-Circuit breaker open for call_external_service: 5 failures exceeded threshold 5
-```
-
----
-
-### 9. `throttle_log`
-
-**Purpose**: Throttles logs to prevent flooding during incidents  
-**Parameters**: `rate=N` (default: 5 logs per minute)  
-**Async Support**: Works with any function
-
-```rust
-#[throttle_log(rate=10)]
-fn process_high_volume_events(event: &Event) {
-    // Will only log 10 times per minute
-    process_event(event);
-}
-```
-
-**Generated Logs**:
-```
-process_high_volume_events executed
-Throttled logs for process_high_volume_events: skipped 45 logs in previous minute
-```
-
----
-
-### 10. `dependency_latency`
-
-**Purpose**: Measures latency to external dependencies  
-**Parameters**: `target="service_name"` or first string argument  
-**Async Support**: Partial (no async detection, but works)
-
-```rust
-#[dependency_latency(target="database")]
-fn fetch_user_data(user_id: &str) -> Result<User, DbError> {
-    database::get_user(user_id)
-}
-
-// Alternative syntax
-#[dependency_latency("payment_service")]
-fn process_payment(amount: f64) -> Result<Receipt, PaymentError> {
-    payment_service::charge(amount)
-}
-```
-
-**Generated Logs**:
-```
-Dependency call to database started for fetch_user_data
-Dependency call to database completed in 125 ms
-```
-
----
-
-### 11. `log_response`
-
-**Purpose**: Logs the returned value from functions  
-**Parameters**: None  
-**Async Support**: Partial (no async detection, but works)
+### `#[log_response]`
+Logs the return value of a function.
 
 ```rust
 #[log_response]
-fn calculate_total(items: &[Item]) -> f64 {
-    items.iter().map(|i| i.price).sum()
+fn calculate() -> i32 {
+    42 // Logs: "calculate returned: 42"
 }
 ```
 
-**Generated Logs**:
-```
-calculate_total returned: 45.67
-```
-
----
-
-### 12. `log_concurrency`
-
-**Purpose**: Tracks concurrent invocations of a function  
-**Parameters**: None  
-**Async Support**: Partial (no async detection, but works)
+### `#[log_result(success_level = "info", error_level = "error")]`
+Logs function results with different log levels for success/error cases.
 
 ```rust
-#[log_concurrency]
-fn handle_request(request: &Request) -> Response {
-    // Tracks how many times this function is running simultaneously
-    process_request(request)
+#[log_result(success_level = "debug", error_level = "warn")]
+fn risky_operation() -> Result<String, Error> {
+    // Success: debug level, Error: warn level
 }
 ```
 
-**Generated Logs**:
-```
-handle_request concurrent invocations: 3
-handle_request concurrent invocations after exit: 2
-```
+## Performance & Monitoring Macros
 
----
-
-### 13. `trace_span`
-
-**Purpose**: Creates and propagates trace IDs for request flow tracking  
-**Parameters**: None  
-**Async Support**: Partial (no async detection, but works)  
-**Requires**: `uuid` crate dependency
+### `#[measure_time]`
+Measures and logs function execution time.
 
 ```rust
-#[trace_span]
-fn handle_api_request(request: &Request) -> Response {
-    // Generates a trace ID that can be used by nested functions
-    process_request_data(request)
-}
-
-#[trace_span]
-fn process_request_data(request: &Request) {
-    // Uses the same trace ID as the parent function
+#[measure_time]
+fn expensive_computation() {
+    // Logs: "expensive_computation completed in 150 ms"
 }
 ```
 
-**Generated Logs**:
-```
-[TraceID: 748405dd-ce44-48bd-9f1a-86fdb5eae237] handle_api_request started
-[TraceID: 748405dd-ce44-48bd-9f1a-86fdb5eae237] process_request_data started
-[TraceID: 748405dd-ce44-48bd-9f1a-86fdb5eae237] handle_api_request completed
-```
-
----
-
-### 14. `feature_flag`
-
-**Purpose**: Logs feature flag state  
-**Parameters**: `flag_name="feature_name"` or first string argument  
-**Async Support**: Partial (no async detection, but works)
-
-```rust
-#[feature_flag(flag_name="new_ui")]
-fn render_dashboard() -> Html {
-    // Logs whether the feature flag is enabled
-    render_ui()
-}
-
-// Alternative syntax
-#[feature_flag("experimental_feature")]
-fn experimental_algorithm() -> Result<Output, Error> {
-    new_algorithm()
-}
-```
-
-**Generated Logs**:
-```
-render_dashboard called with feature flag new_ui = true
-```
-
----
-
-### 15. `metrics_counter`
-
-**Purpose**: Increments metrics counters for function calls  
-**Parameters**: `counter_name="counter_name"` (default: "function_calls")  
-**Async Support**: Partial (no async detection, but works)  
-**Requires**: `prometheus` crate
-
-```rust
-#[metrics_counter(counter_name="api_calls")]
-fn handle_api_call() {
-    // Increments Prometheus counter
-}
-```
-
-**Note**: Always available - no feature flags required.
-
----
-
-### 16. `log_memory_usage`
-
-**Purpose**: Logs memory usage during function execution  
-**Parameters**: None  
-**Async Support**: Partial (no async detection, but works)  
-**Requires**: `psutil` crate
+### `#[log_memory_usage]`
+Monitors memory usage during function execution (requires `psutil`).
 
 ```rust
 #[log_memory_usage]
-fn memory_intensive_operation(data: &[u8]) -> ProcessedData {
-    // Logs memory usage before and after execution
-    process_large_dataset(data)
+fn memory_intensive_task() {
+    // Logs memory before and after execution
 }
 ```
 
-**Generated Logs**:
-```
-memory_intensive_operation starting memory usage - RSS: 1048576 bytes, VMS: 2097152 bytes
-memory_intensive_operation ending memory usage - RSS: 2097152 bytes (delta: 1048576 bytes), VMS: 3145728 bytes (delta: 1048576 bytes)
-```
-
----
-
-### 17. `log_cpu_time`
-
-**Purpose**: Logs CPU time used during function execution  
-**Parameters**: None  
-**Async Support**: Partial (no async detection, but works)  
-**Note**: Currently measures wall time as CPU time is not directly available
+### `#[log_cpu_time]`
+Logs CPU time usage (currently measures wall time as approximation).
 
 ```rust
 #[log_cpu_time]
 fn cpu_intensive_task() {
-    // Logs approximate CPU time (actually wall time)
-    perform_calculations()
+    // Logs: "cpu_intensive_task used CPU time: approx 200 ms (wall time)"
 }
 ```
 
-**Generated Logs**:
-```
-cpu_intensive_task used CPU time: approx 1250 ms (wall time)
-```
-
----
-
-### 18. `version_tag`
-
-**Purpose**: Includes version information in logs  
-**Parameters**: None  
-**Async Support**: Partial (no async detection, but works)  
-**Uses**: `BUILD_VERSION` environment variable
+### `#[log_concurrency]`
+Tracks concurrent invocations of a function.
 
 ```rust
-#[version_tag]
-fn initialize_service() {
-    // Logs the build version with the function call
-    setup_service()
+#[log_concurrency]
+fn shared_resource_handler() {
+    // Logs current concurrency level on entry and exit
 }
 ```
 
-**Generated Logs**:
-```
-[Version: 1.2.3] initialize_service called
-```
-
----
-
-### 19. `request_context`
-
-**Purpose**: Attaches request context to logs  
-**Parameters**: None  
-**Async Support**: Partial (no async detection, but works)  
-**Uses**: Thread-local storage for context (placeholder implementation)
+### `#[dependency_latency(target = "database")]`
+Measures latency to external dependencies.
 
 ```rust
-#[request_context]
-fn process_user_request(data: &RequestData) -> Response {
-    // Logs context like user_id, session_id, request_id
-    handle_request(data)
+#[dependency_latency(target = "redis")]
+fn cache_lookup() -> Result<String, Error> {
+    // Logs dependency call timing and success/failure
 }
 ```
 
-**Generated Logs**:
+## Error Handling & Resilience Macros
+
+### `#[log_errors]`
+Automatically logs errors and panics.
+
+```rust
+#[log_errors]
+fn fallible_operation() -> Result<(), Error> {
+    // Automatically logs any errors returned or panics caught
+}
 ```
-process_user_request called | Context: user_id=12345, session_id=abcd-1234-xyz, request_id=req-789
+
+### `#[log_retries(max_attempts = 3)]`
+Implements retry logic with automatic logging.
+
+```rust
+#[log_retries(max_attempts = 5)]
+fn unreliable_network_call() -> Result<Data, NetworkError> {
+    // Automatically retries up to 5 times with exponential backoff
+    // Logs each attempt and final outcome
+}
 ```
 
----
+### `#[circuit_breaker(failure_threshold = 5)]`
+Implements circuit breaker pattern with logging.
 
-### 20. `catch_panic`
+```rust
+#[circuit_breaker(failure_threshold = 3)]
+fn external_service_call() -> Result<Response, Error> {
+    // Opens circuit after 3 failures, logs circuit state changes
+}
+```
 
-**Purpose**: Catches and logs panics without crashing  
-**Parameters**: None  
-**Async Support**: Full support (limited for async - catches at Result level)  
-**Works With**: Functions that return `Result<T, E>` (recommended)
+### `#[catch_panic]`
+Catches panics and converts them to errors or default values.
 
 ```rust
 #[catch_panic]
-fn risky_operation() -> Result<Output, Error> {
-    // If this panics, it will be caught and logged
-    potentially_panicking_code()
-}
-
-#[catch_panic]
-async fn async_risky_operation() -> Result<Output, Error> {
-    // Async version - catches errors at Result level
-    potentially_failing_async_code().await
+fn potentially_panicking_function() -> Result<String, Box<dyn std::error::Error>> {
+    // Catches panics and converts to Result::Err
 }
 ```
 
-**Generated Logs** (on panic):
-```
-risky_operation caught panic: index out of bounds
-```
-
----
-
-### 21. `health_check`
-
-**Purpose**: Logs health check results with timing  
-**Parameters**: None  
-**Async Support**: Partial (no async detection, but works)  
-**Works With**: Functions returning `Result<T, E>`
+### `#[health_check]`
+Logs health check results with timing.
 
 ```rust
 #[health_check]
-fn database_health_check() -> Result<(), HealthError> {
-    // Logs success/failure with timing
-    database::ping()
+fn database_health() -> Result<(), HealthError> {
+    // Logs health check success/failure with timing
 }
 ```
 
-**Generated Logs**:
-```
-Health check database_health_check passed in 25 ms
-Health check database_health_check failed in 5000 ms: connection timeout
-```
+## DevOps Infrastructure Macros
 
----
-
-### 22. `log_result`
-
-**Purpose**: Logs function results with custom log levels for success/error  
-**Parameters**: `success_level="level"`, `error_level="level"` (default: "info", "error")  
-**Async Support**: Partial (no async detection, but works)  
-**Works With**: Functions returning `Result<T, E>`
+### `#[log_disk_usage(threshold = 85)]`
+Monitors disk usage and alerts on threshold breaches.
 
 ```rust
-#[log_result(success_level="debug", error_level="warn")]
-fn batch_process() -> Result<BatchStats, ProcessError> {
-    // Logs successes at DEBUG level, failures at WARN level
-    process_batch_data()
-}
-
-// Using default levels (info for success, error for failure)
-#[log_result]
-fn critical_operation() -> Result<(), CriticalError> {
-    perform_operation()
+#[log_disk_usage(threshold = 90)]
+fn file_processing_task() {
+    // Monitors disk usage, alerts if >90% full
 }
 ```
 
-**Generated Logs**:
-```
-batch_process succeeded with result: BatchStats { processed: 100, failed: 2 }
-batch_process failed with error: ProcessError::InvalidData
-```
-
----
-
-## Async Support Summary
-
-| Macro | Async Support | Notes |
-|-------|---------------|-------|
-| `log_entry_exit` | Full | Properly detects and handles async functions |
-| `log_errors` | Full | Handles async errors correctly |
-| `measure_time` | Full | Accurate timing for async functions |
-| `log_args` | Partial | Works but doesn't detect async |
-| `log_retries` | Full | Skips sleep delays for async functions |
-| `audit_log` | Full | Properly handles async execution |
-| `circuit_breaker` | Full | Thread-safe failure tracking |
-| `throttle_log` | Works | Rate limiting works for any function |
-| `dependency_latency` | Partial | Works but doesn't detect async |
-| `log_response` | Partial | Works but doesn't detect async |
-| `log_concurrency` | Partial | Works but doesn't detect async |
-| `trace_span` | Partial | Works but doesn't detect async |
-| `feature_flag` | Partial | Works but doesn't detect async |
-| `metrics_counter` | Partial | Works but doesn't detect async |
-| `log_memory_usage` | Partial | Works but doesn't detect async |
-| `log_cpu_time` | Partial | Works but doesn't detect async |
-| `version_tag` | Partial | Works but doesn't detect async |
-| `request_context` | Partial | Works but doesn't detect async |
-| `catch_panic` | Full | Limited async support (Result-level) |
-| `health_check` | Partial | Works but doesn't detect async |
-| `log_result` | Partial | Works but doesn't detect async |
-
----
-
-## Combining Multiple Macros
-
-You can stack multiple macros on the same function:
+### `#[log_network_connectivity(endpoint = "8.8.8.8:53")]`
+Monitors network connectivity to specified endpoints.
 
 ```rust
-#[log_entry_exit]
-#[measure_time]
-#[log_errors]
+#[log_network_connectivity(endpoint = "api.service.com:443")]
+fn network_dependent_operation() {
+    // Checks connectivity before/after operation
+}
+```
+
+### `#[log_database_pool(pool_name = "primary", threshold = 80)]`
+Monitors database connection pool health.
+
+```rust
+#[log_database_pool(pool_name = "user_db", threshold = 75)]
+fn database_operation() {
+    // Monitors connection pool utilization
+}
+```
+
+### `#[log_file_descriptors(threshold = 1000)]`
+Monitors file descriptor usage to detect resource leaks.
+
+```rust
+#[log_file_descriptors(threshold = 800)]
+fn file_intensive_operation() {
+    // Tracks file descriptor count changes
+}
+```
+
+### `#[log_cache_hit_ratio(cache_name = "redis", threshold = 70)]`
+Monitors cache performance metrics.
+
+```rust
+#[log_cache_hit_ratio(cache_name = "session_cache", threshold = 85)]
+fn cached_data_access() {
+    // Monitors cache hit ratios and performance
+}
+```
+
+### `#[log_queue_depth(queue_name = "tasks", threshold = 500)]`
+Monitors message queue depth and processing rates.
+
+```rust
+#[log_queue_depth(queue_name = "email_queue", threshold = 1000)]
+fn queue_processor() {
+    // Monitors queue depth and processing performance
+}
+```
+
+### `#[log_gc_pressure(threshold = 150)]`
+Monitors garbage collection pressure (for GC-enabled environments).
+
+```rust
+#[log_gc_pressure(threshold = 100)]
+fn memory_allocating_function() {
+    // Monitors GC activity during execution
+}
+```
+
+### `#[log_thread_pool_utilization(thread_pool_name = "workers", threshold = 85)]`
+Monitors thread pool utilization and performance.
+
+```rust
+#[log_thread_pool_utilization(thread_pool_name = "http_workers", threshold = 90)]
+fn concurrent_task() {
+    // Monitors thread pool utilization
+}
+```
+
+## Distributed Systems Macros
+
+### `#[log_transaction(domain = "payment", timeout_ms = 5000)]`
+Monitors transaction processing with timeout warnings.
+
+```rust
+#[log_transaction(domain = "order_processing", timeout_ms = 3000)]
+fn process_payment() -> Result<Receipt, PaymentError> {
+    // Monitors transaction state and timing
+}
+```
+
+### `#[log_service_communication(service_name = "user_service", timeout_ms = 2000)]`
+Monitors inter-service communication and RPC calls.
+
+```rust
+#[log_service_communication(service_name = "inventory_service", timeout_ms = 1500)]
+fn check_stock() -> Result<StockLevel, ServiceError> {
+    // Monitors service-to-service communication
+}
+```
+
+### `#[log_consensus_operation(domain = "cluster", timeout_ms = 10000)]`
+Monitors consensus algorithm operations in distributed systems.
+
+```rust
+#[log_consensus_operation(domain = "raft", timeout_ms = 5000)]
+fn elect_leader() -> Result<LeaderInfo, ConsensusError> {
+    // Monitors consensus protocol operations
+}
+```
+
+### `#[log_cluster_health(domain = "kubernetes", threshold = 80)]`
+Monitors cluster health and node membership.
+
+```rust
+#[log_cluster_health(domain = "docker_swarm", threshold = 70)]
+fn cluster_operation() {
+    // Monitors overall cluster health metrics
+}
+```
+
+### `#[log_distributed_lock(domain = "resource_lock", timeout_ms = 30000)]`
+Monitors distributed lock operations and coordination.
+
+```rust
+#[log_distributed_lock(domain = "file_processing", timeout_ms = 15000)]
+fn exclusive_operation() -> Result<(), LockError> {
+    // Monitors distributed lock acquisition and release
+}
+```
+
+### `#[log_trace_correlation(service_name = "api_gateway")]`
+Implements distributed tracing with correlation IDs.
+
+```rust
+#[log_trace_correlation(service_name = "order_service")]
+fn handle_order() {
+    // Adds distributed tracing context to logs
+}
+```
+
+## Advanced Analytics Macros
+
+### `#[log_anomaly_detection(service_name = "api", max_utilization = 85)]`
+Implements anomaly detection for function behavior patterns.
+
+```rust
+#[log_anomaly_detection(service_name = "recommendation_engine", max_utilization = 90)]
+fn generate_recommendations() {
+    // Monitors for anomalous behavior patterns
+}
+```
+
+### `#[log_custom_metrics(metric_name = "business_kpi")]`
+Collects custom metrics and dimensional data.
+
+```rust
+#[log_custom_metrics(metric_name = "conversion_rate")]
+fn track_conversion() {
+    // Collects custom business metrics
+}
+```
+
+### `#[metrics_counter(counter_name = "api_calls")]`
+Increments Prometheus metrics counters (requires `prometheus` crate).
+
+```rust
+#[metrics_counter(counter_name = "user_registrations")]
+fn register_user() {
+    // Increments Prometheus counter
+}
+```
+
+### `#[log_health_check(service_name = "api", threshold = 95)]`
+Comprehensive health monitoring with multiple checkpoints.
+
+```rust
+#[log_health_check(service_name = "payment_service", threshold = 99)]
+fn comprehensive_health_check() -> Result<HealthStatus, HealthError> {
+    // Monitors multiple health indicators
+}
+```
+
+## Security & Compliance Macros
+
+### `#[log_security_event(warning_level = "high")]`
+Logs security-related events and violations.
+
+```rust
+#[log_security_event(warning_level = "critical")]
+fn privileged_operation() {
+    // Logs security events for audit trails
+}
+```
+
+### `#[log_compliance_check(domain = "gdpr")]`
+Monitors compliance-related operations.
+
+```rust
+#[log_compliance_check(domain = "pci_dss")]
+fn process_payment_data() {
+    // Logs compliance-related activities
+}
+```
+
+### `#[log_access_control(domain = "admin_panel")]`
+Monitors access control and authorization events.
+
+```rust
+#[log_access_control(domain = "user_management")]
+fn modify_user_permissions() {
+    // Logs access control decisions
+}
+```
+
+### `#[log_crypto_operation(domain = "encryption")]`
+Monitors cryptographic operations for security auditing.
+
+```rust
+#[log_crypto_operation(domain = "key_generation")]
+fn generate_encryption_key() {
+    // Logs cryptographic operations
+}
+```
+
+### `#[audit_log]`
+Creates detailed audit trails with user context.
+
+```rust
 #[audit_log]
-async fn critical_async_operation(user_id: &str) -> Result<Output, Error> {
-    // This function will:
-    // 1. Log entry and exit
-    // 2. Measure execution time
-    // 3. Log any errors that occur
-    // 4. Create audit trail
-    perform_critical_work(user_id).await
+fn sensitive_operation() {
+    // Creates comprehensive audit logs with user context
 }
 ```
 
----
+## Business Logic Macros
 
-## Error Handling and Type Safety
-
-All macros use pattern matching instead of reflection, making them:
-- **Type-safe**: Work with any `Result<T, E>` type
-- **Performance-friendly**: No runtime type inspection
-- **Reliable**: Won't break with custom error types
+### `#[log_business_rule(domain = "order_processing")]`
+Monitors business rule execution and validation.
 
 ```rust
-// Works with any error type
-#[log_errors]
-fn custom_error_function() -> Result<(), MyCustomError> {
-    Err(MyCustomError::SomeVariant)
-}
-
-#[log_retries(max_attempts=3)]
-fn another_error_type() -> Result<String, AnotherError> {
-    Err(AnotherError::NetworkTimeout)
+#[log_business_rule(domain = "pricing")]
+fn apply_discount_rules() -> Result<Price, BusinessRuleError> {
+    // Monitors business rule execution and compliance
 }
 ```
 
----
+### `#[log_data_quality(domain = "customer_data", threshold = 98)]`
+Monitors data quality checks and validation processes.
 
-## Performance Considerations
-
-- **Async macros** have minimal overhead and don't block async runtime
-- **Retry logic** skips sleep delays in async functions (implement your own if needed)
-- **Memory/CPU tracking** macros require optional dependencies
-- **Throttling** uses atomic counters for thread-safe rate limiting
-- **Pattern matching** is used instead of reflection for better performance
-
----
-
-## Configuration Dependencies
-
-Some macros require additional crates to be added to your dependencies:
-
-### For `trace_span`:
-```toml
-[dependencies]
-uuid = "1.0"
+```rust
+#[log_data_quality(domain = "product_catalog", threshold = 95)]
+fn validate_product_data() -> Result<ValidationReport, DataError> {
+    // Monitors data quality metrics and validation results
+}
 ```
 
-### For `metrics_counter`:
-```toml
-[dependencies]
-prometheus = "0.13"
+### `#[log_workflow_step(domain = "payment_flow", max_depth = 5)]`
+Monitors workflow and process execution steps.
+
+```rust
+#[log_workflow_step(domain = "order_fulfillment", max_depth = 10)]
+fn process_order_step() -> Result<StepResult, WorkflowError> {
+    // Monitors workflow execution and step progression
+}
 ```
 
-### For `log_memory_usage`:
-```toml
-[dependencies]
-psutil = "3.2"
+## Configuration & Infrastructure Macros
+
+### `#[log_config_change(domain = "app_config")]`
+Monitors configuration changes and updates.
+
+```rust
+#[log_config_change(domain = "feature_flags")]
+fn update_configuration() {
+    // Logs configuration changes for audit trails
+}
 ```
 
-**Note**: All features are now enabled by default. No feature flags are required.
+### `#[log_deployment(service_name = "web_service")]`
+Monitors deployment processes and changes.
 
----
+```rust
+#[log_deployment(service_name = "api_service")]
+fn deploy_new_version() {
+    // Logs deployment activities and status
+}
+```
+
+### `#[log_environment_validation(service_name = "api")]`
+Monitors environment validation and health checks.
+
+```rust
+#[log_environment_validation(service_name = "database")]
+fn validate_environment() {
+    // Validates environment configuration and dependencies
+}
+```
+
+### `#[log_feature_flag_change(min_percentage = 10, max_percentage = 90)]`
+Monitors feature flag changes and rollout percentages.
+
+```rust
+#[log_feature_flag_change(min_percentage = 0, max_percentage = 100)]
+fn toggle_feature() {
+    // Monitors feature flag state changes
+}
+```
+
+### `#[log_api_rate_limits(service_name = "external_api", threshold = 90)]`
+Monitors API rate limiting and usage patterns.
+
+```rust
+#[log_api_rate_limits(service_name = "payment_gateway", threshold = 80)]
+fn api_call() {
+    // Monitors API rate limit consumption
+}
+```
+
+### `#[log_ssl_certificate_expiry(domain = "api.example.com", days_warning = 30)]`
+Monitors SSL certificate expiration and renewal needs.
+
+```rust
+#[log_ssl_certificate_expiry(domain = "secure.myapp.com", days_warning = 60)]
+fn check_certificates() {
+    // Monitors SSL certificate expiration dates
+}
+```
+
+### `#[log_service_discovery(service_name = "user_service")]`
+Monitors service discovery and registration processes.
+
+```rust
+#[log_service_discovery(service_name = "notification_service")]
+fn discover_services() {
+    // Monitors service discovery operations
+}
+```
+
+### `#[log_load_balancer_health(service_name = "api_lb", threshold = 3)]`
+Monitors load balancer health and backend availability.
+
+```rust
+#[log_load_balancer_health(service_name = "web_lb", threshold = 2)]
+fn check_load_balancer() {
+    // Monitors load balancer health and backend status
+}
+```
+
+## Utility & Context Macros
+
+### `#[trace_span]`
+Creates distributed tracing spans with UUID generation (requires `uuid` crate).
+
+```rust
+#[trace_span]
+fn traced_operation() {
+    // Creates trace spans for request flow tracking
+}
+```
+
+### `#[feature_flag(flag_name = "new_algorithm")]`
+Logs feature flag state during execution.
+
+```rust
+#[feature_flag(flag_name = "experimental_feature")]
+fn conditional_feature() {
+    // Logs feature flag state for debugging
+}
+```
+
+### `#[request_context]`
+Attaches request context (user_id, session_id, etc.) to logs.
+
+```rust
+#[request_context]
+fn handle_user_request() {
+    // Adds request context to all log messages
+}
+```
+
+### `#[version_tag]`
+Includes version information in logs.
+
+```rust
+#[version_tag]
+fn versioned_operation() {
+    // Includes build version in log messages
+}
+```
+
+### `#[throttle_log(rate = 5)]`
+Throttles log output to prevent flooding during incidents.
+
+```rust
+#[throttle_log(rate = 10)]
+fn high_frequency_operation() {
+    // Limits logging to 10 messages per minute
+}
+```
 
 ## Best Practices
 
-1. **Initialize once**: Call `initialize_logger_attributes!()` at module level
-2. **Combine wisely**: Stack complementary macros (e.g., `log_entry_exit` + `measure_time`)
-3. **Use appropriate levels**: Configure `log_result` with suitable success/error levels
-4. **Async awareness**: Prefer macros with full async support for async functions
-5. **Error handling**: Use macros with `Result<T, E>` return types for best results
-6. **Dependencies**: Add required crates (`uuid`, `prometheus`, `psutil`) as needed
+1. **Always initialize**: Call `initialize_logger_attributes!()` before using any attribute macros
+2. **Combine macros**: Multiple macros can be applied to the same function
+3. **Choose appropriate thresholds**: Set realistic thresholds for alerting macros
+4. **Monitor performance impact**: Some macros add overhead - use judiciously in hot paths
+5. **Use structured logging**: Take advantage of the context fields for better log analysis
+6. **Configure log levels**: Ensure your logging framework is configured to handle the log levels used
 
----
+## Error Handling
 
-## Troubleshooting
+All macros are designed to be non-intrusive. If logging fails, the original function execution continues normally. Macro-generated code includes error handling to prevent logging issues from affecting application functionality.
 
-### Common Issues:
+## Dependencies
 
-1. **"Helper functions not found"**: Ensure `initialize_logger_attributes!()` is called
-2. **Compile errors with async**: Use macros with full async support
-3. **Missing dependencies**: Add required crates (`uuid`, `prometheus`, `psutil`) for specific macros
-4. **Pattern matching errors**: Ensure functions return appropriate types
+Some macros require additional dependencies:
+- `#[metrics_counter]`: Requires `prometheus` crate
+- `#[log_memory_usage]`: Requires `psutil` crate  
+- `#[trace_span]`: Requires `uuid` crate
 
-### Debug Tips:
-
-1. Check that `liblogger::Logger::init()` is called before using macros
-2. Verify macro order when stacking (some combinations work better than others)
-3. Use `cargo expand` to see generated code if debugging macro behavior
-4. Ensure all required dependencies are added to your `Cargo.toml`
-
----
-
-This documentation covers all 22 procedural macros available in the `liblogger_macros` crate. Each macro is designed to work seamlessly with the liblogger framework while providing specialized logging and monitoring capabilities for different use cases.
+Make sure to add these to your `Cargo.toml` when using the corresponding macros.
