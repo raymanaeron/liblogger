@@ -191,6 +191,9 @@ Add the following to your `Cargo.toml`:
 [dependencies]
 liblogger = { path = "../path/to/liblogger" }
 liblogger_macros = { path = "../path/to/liblogger_macros" }
+# Required dependencies for macro functionality
+prometheus = "0.13"
+psutil = "3.2"
 ```
 
 ### Basic Usage in 3 Steps
