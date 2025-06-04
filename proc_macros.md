@@ -66,7 +66,7 @@ initialize_logger_attributes!();
 
 **Purpose**: Logs function entry and exit points  
 **Parameters**: None  
-**Async Support**: ✅ Full support
+**Async Support**: Full support
 
 ```rust
 #[log_entry_exit]
@@ -92,7 +92,7 @@ EXIT: process_data
 
 **Purpose**: Automatically logs errors and panics from functions  
 **Parameters**: None  
-**Async Support**: ✅ Full support  
+**Async Support**: Full support  
 **Works With**: Any `Result<T, E>` return type
 
 ```rust
@@ -122,7 +122,7 @@ validate_input returned error: Empty
 
 **Purpose**: Measures and logs function execution time  
 **Parameters**: None  
-**Async Support**: ✅ Full support
+**Async Support**: Full support
 
 ```rust
 #[measure_time]
@@ -149,7 +149,7 @@ generate_report completed in 1250 ms
 
 **Purpose**: Logs specified function arguments  
 **Parameters**: List of argument names to log  
-**Async Support**: ⚠️ Partial (no async detection, but works)
+**Async Support**: Partial (no async detection, but works)
 
 ```rust
 #[log_args(user_id, action)]
@@ -169,7 +169,7 @@ Entering audit_user_action with args: user_id = "12345", action = "delete_accoun
 
 **Purpose**: Implements retry logic with comprehensive logging  
 **Parameters**: `max_attempts=N` (default: 3)  
-**Async Support**: ✅ Full support (skips sleep delays)  
+**Async Support**: Full support (skips sleep delays)  
 **Works With**: Any `Result<T, E>` return type
 
 ```rust
@@ -199,7 +199,7 @@ connect_to_database succeeded after 2 attempts
 
 **Purpose**: Creates detailed audit logs for security-sensitive operations  
 **Parameters**: None  
-**Async Support**: ✅ Full support
+**Async Support**: Full support
 
 ```rust
 #[audit_log]
@@ -225,7 +225,7 @@ AUDIT: change_permissions completed in 45 ms
 
 **Purpose**: Implements circuit breaker pattern with failure tracking  
 **Parameters**: `failure_threshold=N` (default: 3)  
-**Async Support**: ✅ Full support  
+**Async Support**: Full support  
 **Works With**: Any `Result<T, E>` return type
 
 ```rust
@@ -254,7 +254,7 @@ Circuit breaker open for call_external_service: 5 failures exceeded threshold 5
 
 **Purpose**: Throttles logs to prevent flooding during incidents  
 **Parameters**: `rate=N` (default: 5 logs per minute)  
-**Async Support**: ✅ Works with any function
+**Async Support**: Works with any function
 
 ```rust
 #[throttle_log(rate=10)]
@@ -276,7 +276,7 @@ Throttled logs for process_high_volume_events: skipped 45 logs in previous minut
 
 **Purpose**: Measures latency to external dependencies  
 **Parameters**: `target="service_name"` or first string argument  
-**Async Support**: ⚠️ Partial (no async detection, but works)
+**Async Support**: Partial (no async detection, but works)
 
 ```rust
 #[dependency_latency(target="database")]
@@ -303,7 +303,7 @@ Dependency call to database completed in 125 ms
 
 **Purpose**: Logs the returned value from functions  
 **Parameters**: None  
-**Async Support**: ⚠️ Partial (no async detection, but works)
+**Async Support**: Partial (no async detection, but works)
 
 ```rust
 #[log_response]
@@ -323,7 +323,7 @@ calculate_total returned: 45.67
 
 **Purpose**: Tracks concurrent invocations of a function  
 **Parameters**: None  
-**Async Support**: ⚠️ Partial (no async detection, but works)
+**Async Support**: Partial (no async detection, but works)
 
 ```rust
 #[log_concurrency]
@@ -345,7 +345,7 @@ handle_request concurrent invocations after exit: 2
 
 **Purpose**: Creates and propagates trace IDs for request flow tracking  
 **Parameters**: None  
-**Async Support**: ⚠️ Partial (no async detection, but works)  
+**Async Support**: Partial (no async detection, but works)  
 **Requires**: `uuid` crate dependency
 
 ```rust
@@ -374,7 +374,7 @@ fn process_request_data(request: &Request) {
 
 **Purpose**: Logs feature flag state  
 **Parameters**: `flag_name="feature_name"` or first string argument  
-**Async Support**: ⚠️ Partial (no async detection, but works)
+**Async Support**: Partial (no async detection, but works)
 
 ```rust
 #[feature_flag(flag_name="new_ui")]
@@ -401,7 +401,7 @@ render_dashboard called with feature flag new_ui = true
 
 **Purpose**: Increments metrics counters for function calls  
 **Parameters**: `counter_name="counter_name"` (default: "function_calls")  
-**Async Support**: ⚠️ Partial (no async detection, but works)  
+**Async Support**: Partial (no async detection, but works)  
 **Requires**: `prometheus` crate
 
 ```rust
@@ -419,7 +419,7 @@ fn handle_api_call() {
 
 **Purpose**: Logs memory usage during function execution  
 **Parameters**: None  
-**Async Support**: ⚠️ Partial (no async detection, but works)  
+**Async Support**: Partial (no async detection, but works)  
 **Requires**: `psutil` crate
 
 ```rust
@@ -442,7 +442,7 @@ memory_intensive_operation ending memory usage - RSS: 2097152 bytes (delta: 1048
 
 **Purpose**: Logs CPU time used during function execution  
 **Parameters**: None  
-**Async Support**: ⚠️ Partial (no async detection, but works)  
+**Async Support**: Partial (no async detection, but works)  
 **Note**: Currently measures wall time as CPU time is not directly available
 
 ```rust
@@ -464,7 +464,7 @@ cpu_intensive_task used CPU time: approx 1250 ms (wall time)
 
 **Purpose**: Includes version information in logs  
 **Parameters**: None  
-**Async Support**: ⚠️ Partial (no async detection, but works)  
+**Async Support**: Partial (no async detection, but works)  
 **Uses**: `BUILD_VERSION` environment variable
 
 ```rust
@@ -486,7 +486,7 @@ fn initialize_service() {
 
 **Purpose**: Attaches request context to logs  
 **Parameters**: None  
-**Async Support**: ⚠️ Partial (no async detection, but works)  
+**Async Support**: Partial (no async detection, but works)  
 **Uses**: Thread-local storage for context (placeholder implementation)
 
 ```rust
@@ -508,7 +508,7 @@ process_user_request called | Context: user_id=12345, session_id=abcd-1234-xyz, 
 
 **Purpose**: Catches and logs panics without crashing  
 **Parameters**: None  
-**Async Support**: ✅ Full support (limited for async - catches at Result level)  
+**Async Support**: Full support (limited for async - catches at Result level)  
 **Works With**: Functions that return `Result<T, E>` (recommended)
 
 ```rust
@@ -536,7 +536,7 @@ risky_operation caught panic: index out of bounds
 
 **Purpose**: Logs health check results with timing  
 **Parameters**: None  
-**Async Support**: ⚠️ Partial (no async detection, but works)  
+**Async Support**: Partial (no async detection, but works)  
 **Works With**: Functions returning `Result<T, E>`
 
 ```rust
@@ -559,7 +559,7 @@ Health check database_health_check failed in 5000 ms: connection timeout
 
 **Purpose**: Logs function results with custom log levels for success/error  
 **Parameters**: `success_level="level"`, `error_level="level"` (default: "info", "error")  
-**Async Support**: ⚠️ Partial (no async detection, but works)  
+**Async Support**: Partial (no async detection, but works)  
 **Works With**: Functions returning `Result<T, E>`
 
 ```rust
@@ -588,27 +588,27 @@ batch_process failed with error: ProcessError::InvalidData
 
 | Macro | Async Support | Notes |
 |-------|---------------|-------|
-| `log_entry_exit` | ✅ Full | Properly detects and handles async functions |
-| `log_errors` | ✅ Full | Handles async errors correctly |
-| `measure_time` | ✅ Full | Accurate timing for async functions |
-| `log_args` | ⚠️ Partial | Works but doesn't detect async |
-| `log_retries` | ✅ Full | Skips sleep delays for async functions |
-| `audit_log` | ✅ Full | Properly handles async execution |
-| `circuit_breaker` | ✅ Full | Thread-safe failure tracking |
-| `throttle_log` | ✅ Works | Rate limiting works for any function |
-| `dependency_latency` | ⚠️ Partial | Works but doesn't detect async |
-| `log_response` | ⚠️ Partial | Works but doesn't detect async |
-| `log_concurrency` | ⚠️ Partial | Works but doesn't detect async |
-| `trace_span` | ⚠️ Partial | Works but doesn't detect async |
-| `feature_flag` | ⚠️ Partial | Works but doesn't detect async |
-| `metrics_counter` | ⚠️ Partial | Works but doesn't detect async |
-| `log_memory_usage` | ⚠️ Partial | Works but doesn't detect async |
-| `log_cpu_time` | ⚠️ Partial | Works but doesn't detect async |
-| `version_tag` | ⚠️ Partial | Works but doesn't detect async |
-| `request_context` | ⚠️ Partial | Works but doesn't detect async |
-| `catch_panic` | ✅ Full | Limited async support (Result-level) |
-| `health_check` | ⚠️ Partial | Works but doesn't detect async |
-| `log_result` | ⚠️ Partial | Works but doesn't detect async |
+| `log_entry_exit` | Full | Properly detects and handles async functions |
+| `log_errors` | Full | Handles async errors correctly |
+| `measure_time` | Full | Accurate timing for async functions |
+| `log_args` | Partial | Works but doesn't detect async |
+| `log_retries` | Full | Skips sleep delays for async functions |
+| `audit_log` | Full | Properly handles async execution |
+| `circuit_breaker` | Full | Thread-safe failure tracking |
+| `throttle_log` | Works | Rate limiting works for any function |
+| `dependency_latency` | Partial | Works but doesn't detect async |
+| `log_response` | Partial | Works but doesn't detect async |
+| `log_concurrency` | Partial | Works but doesn't detect async |
+| `trace_span` | Partial | Works but doesn't detect async |
+| `feature_flag` | Partial | Works but doesn't detect async |
+| `metrics_counter` | Partial | Works but doesn't detect async |
+| `log_memory_usage` | Partial | Works but doesn't detect async |
+| `log_cpu_time` | Partial | Works but doesn't detect async |
+| `version_tag` | Partial | Works but doesn't detect async |
+| `request_context` | Partial | Works but doesn't detect async |
+| `catch_panic` | Full | Limited async support (Result-level) |
+| `health_check` | Partial | Works but doesn't detect async |
+| `log_result` | Partial | Works but doesn't detect async |
 
 ---
 
