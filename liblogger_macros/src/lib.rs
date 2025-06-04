@@ -77,38 +77,57 @@ pub fn log_errors(_args: TokenStream, input: TokenStream) -> TokenStream {
     let mut input_fn = parse_macro_input!(input as ItemFn);
     let fn_name = get_fn_name(&input_fn);
     let orig_block = input_fn.block.clone();
+    let is_async = input_fn.sig.asyncness.is_some();
     
-    input_fn.block = Box::new(parse_quote!({
-        use std::panic::{catch_unwind, AssertUnwindSafe};
-        
-        let result = catch_unwind(AssertUnwindSafe(|| #orig_block));
-        
-        match result {
-            Ok(inner_result) => {
+    if is_async {
+        input_fn.block = Box::new(parse_quote!({
+            async move {
+                let result = async move #orig_block.await;
+                
                 // Use pattern matching to handle Result types
-                match &inner_result {
+                match &result {
                     Ok(_) => {},  // Success case, no logging needed
                     Err(err) => {
                         // Error case, log the error
                         liblogger::log_error!(&format!("{} returned error: {:?}", #fn_name, err), None);
                     }
                 }
-                inner_result
-            },
-            Err(panic_err) => {
-                let panic_msg = if let Some(s) = panic_err.downcast_ref::<&str>() {
-                    s.to_string()
-                } else if let Some(s) = panic_err.downcast_ref::<String>() {
-                    s.clone()
-                } else {
-                    "Unknown panic".to_string()
-                };
-                
-                liblogger::log_error!(&format!("{} panicked: {}", #fn_name, panic_msg), None);
-                std::panic::resume_unwind(panic_err);
+                result
+            }.await
+        }));
+    } else {
+        input_fn.block = Box::new(parse_quote!({
+            use std::panic::{catch_unwind, AssertUnwindSafe};
+            
+            let result = catch_unwind(AssertUnwindSafe(|| #orig_block));
+            
+            match result {
+                Ok(inner_result) => {
+                    // Use pattern matching to handle Result types
+                    match &inner_result {
+                        Ok(_) => {},  // Success case, no logging needed
+                        Err(err) => {
+                            // Error case, log the error
+                            liblogger::log_error!(&format!("{} returned error: {:?}", #fn_name, err), None);
+                        }
+                    }
+                    inner_result
+                },
+                Err(panic_err) => {
+                    let panic_msg = if let Some(s) = panic_err.downcast_ref::<&str>() {
+                        s.to_string()
+                    } else if let Some(s) = panic_err.downcast_ref::<String>() {
+                        s.clone()
+                    } else {
+                        "Unknown panic".to_string()
+                    };
+                    
+                    liblogger::log_error!(&format!("{} panicked: {}", #fn_name, panic_msg), None);
+                    std::panic::resume_unwind(panic_err);
+                }
             }
-        }
-    }));
+        }));
+    }
     
     TokenStream::from(quote!(#input_fn))
 }
@@ -119,32 +138,49 @@ pub fn measure_time(_args: TokenStream, input: TokenStream) -> TokenStream {
     let mut input_fn = parse_macro_input!(input as ItemFn);
     let fn_name = get_fn_name(&input_fn);
     let orig_block = input_fn.block.clone();
+    let is_async = input_fn.sig.asyncness.is_some();
     
-    input_fn.block = Box::new(parse_quote!({
-        use std::time::Instant;
-        use std::panic::{catch_unwind, AssertUnwindSafe};
-        
-        let start_time = Instant::now();
-        
-        let result = catch_unwind(AssertUnwindSafe(|| #orig_block));
-        
-        let duration = start_time.elapsed();
-        let duration_ms = duration.as_millis();
-        
-        match result {
-            Ok(output) => {
+    if is_async {
+        input_fn.block = Box::new(parse_quote!({
+            async move {
+                use std::time::Instant;
+                
+                let start_time = Instant::now();
+                let result = async move #orig_block.await;
+                let duration = start_time.elapsed();
+                let duration_ms = duration.as_millis();
+                
                 liblogger::log_info!(&format!("{} completed in {} ms ", #fn_name, duration_ms), None);
-                output
-            },
-            Err(panic_err) => {
-                liblogger::log_error!(
-                    &format!("{} panicked after {} ms ", #fn_name, duration_ms), 
-                    None
-                );
-                std::panic::resume_unwind(panic_err);
+                result
+            }.await
+        }));
+    } else {
+        input_fn.block = Box::new(parse_quote!({
+            use std::time::Instant;
+            use std::panic::{catch_unwind, AssertUnwindSafe};
+            
+            let start_time = Instant::now();
+            
+            let result = catch_unwind(AssertUnwindSafe(|| #orig_block));
+            
+            let duration = start_time.elapsed();
+            let duration_ms = duration.as_millis();
+            
+            match result {
+                Ok(output) => {
+                    liblogger::log_info!(&format!("{} completed in {} ms ", #fn_name, duration_ms), None);
+                    output
+                },
+                Err(panic_err) => {
+                    liblogger::log_error!(
+                        &format!("{} panicked after {} ms ", #fn_name, duration_ms), 
+                        None
+                    );
+                    std::panic::resume_unwind(panic_err);
+                }
             }
-        }
-    }));
+        }));
+    }
     
     TokenStream::from(quote!(#input_fn))
 }
@@ -188,57 +224,112 @@ pub fn log_args(args: TokenStream, input: TokenStream) -> TokenStream {
 pub fn log_retries(args: TokenStream, input: TokenStream) -> TokenStream {
     let args = parse_macro_input!(args as MacroArgs);
     let max_attempts = args.max_attempts.unwrap_or(3);
-    
-    let mut input_fn = parse_macro_input!(input as ItemFn);
+      let mut input_fn = parse_macro_input!(input as ItemFn);
     let fn_name = get_fn_name(&input_fn);
     let orig_block = input_fn.block.clone();
-    
-    input_fn.block = Box::new(parse_quote!({
-        let mut attempts = 0u32;
-        loop {
-            attempts += 1;
-            if attempts > 1 {
-                liblogger::log_info!(
-                    &format!("Retry attempt {} of {} for {}", attempts, #max_attempts, #fn_name), 
-                    None
-                );
-                // Simple exponential backoff
-                std::thread::sleep(std::time::Duration::from_millis((2u64.pow(attempts - 1) * 50) as u64));
-            }
-            
-            let result = (|| #orig_block)();
-            
-            // Use pattern matching to determine success or failure
-            match &result {
-                Ok(_) => {
-                    // Success case
+    let is_async = input_fn.sig.asyncness.is_some();
+
+    if is_async {
+        input_fn.block = Box::new(parse_quote!({
+            async move {
+                let mut attempts = 0u32;
+                loop {
+                    attempts += 1;
                     if attempts > 1 {
                         liblogger::log_info!(
-                            &format!("{} succeeded after {} attempts", #fn_name, attempts), 
+                            &format!("Retry attempt {} of {} for {}", attempts, #max_attempts, #fn_name), 
                             None
                         );
-                    }
-                    return result;
-                },
-                Err(err) => {
-                    // Error case
-                    if attempts >= #max_attempts {
-                        liblogger::log_error!(
-                            &format!("{} failed after {} attempts: {:?}", #fn_name, attempts, err), 
+                        // For async functions, we skip the delay to avoid tokio dependency
+                        // The user should implement their own delay if needed
+                        liblogger::log_info!(
+                            &format!("Async retry delay skipped for {} (implement your own async delay if needed)", #fn_name), 
                             None
                         );
-                        return result;
                     }
                     
-                    liblogger::log_warn!(
-                        &format!("{} attempt {} failed: {:?}", #fn_name, attempts, err), 
+                    let result = async move #orig_block.await;
+                    
+                    // Use pattern matching to determine success or failure
+                    match &result {
+                        Ok(_) => {
+                            // Success case
+                            if attempts > 1 {
+                                liblogger::log_info!(
+                                    &format!("{} succeeded after {} attempts", #fn_name, attempts), 
+                                    None
+                                );
+                            }
+                            return result;
+                        },
+                        Err(err) => {
+                            // Error case
+                            if attempts >= #max_attempts {
+                                liblogger::log_error!(
+                                    &format!("{} failed after {} attempts: {:?}", #fn_name, attempts, err), 
+                                    None
+                                );
+                                return result;
+                            }
+                            
+                            liblogger::log_warn!(
+                                &format!("{} attempt {} failed: {:?}", #fn_name, attempts, err), 
+                                None
+                            );
+                            // Continue to next retry iteration
+                        }
+                    }
+                }
+            }.await
+        }));
+    } else {
+        input_fn.block = Box::new(parse_quote!({
+            let mut attempts = 0u32;
+            loop {
+                attempts += 1;
+                if attempts > 1 {
+                    liblogger::log_info!(
+                        &format!("Retry attempt {} of {} for {}", attempts, #max_attempts, #fn_name), 
                         None
                     );
-                    // Continue to next retry iteration
+                    // Simple exponential backoff
+                    std::thread::sleep(std::time::Duration::from_millis((2u64.pow(attempts - 1) * 50) as u64));
+                }
+                
+                let result = (|| #orig_block)();
+                
+                // Use pattern matching to determine success or failure
+                match &result {
+                    Ok(_) => {
+                        // Success case
+                        if attempts > 1 {
+                            liblogger::log_info!(
+                                &format!("{} succeeded after {} attempts", #fn_name, attempts), 
+                                None
+                            );
+                        }
+                        return result;
+                    },
+                    Err(err) => {
+                        // Error case
+                        if attempts >= #max_attempts {
+                            liblogger::log_error!(
+                                &format!("{} failed after {} attempts: {:?}", #fn_name, attempts, err), 
+                                None
+                            );
+                            return result;
+                        }
+                        
+                        liblogger::log_warn!(
+                            &format!("{} attempt {} failed: {:?}", #fn_name, attempts, err), 
+                            None
+                        );
+                        // Continue to next retry iteration
+                    }
                 }
             }
-        }
-    }));
+        }));
+    }
     
     TokenStream::from(quote!(#input_fn))
 }
@@ -249,36 +340,57 @@ pub fn audit_log(_args: TokenStream, input: TokenStream) -> TokenStream {
     let mut input_fn = parse_macro_input!(input as ItemFn);
     let fn_name = get_fn_name(&input_fn);
     let orig_block = input_fn.block.clone();
+    let is_async = input_fn.sig.asyncness.is_some();
     
-    input_fn.block = Box::new(parse_quote!({
-        let user_id = get_thread_local_value("user_id").unwrap_or_else(|| "unknown".to_string());
-        liblogger::log_info!(&format!("AUDIT: {} called", #fn_name), Some(format!("user_id={}", user_id)));
-        
-        let start_time = std::time::Instant::now();
-        let result = #orig_block;
-        let duration = start_time.elapsed();
-        
-        // Use pattern matching on result
-        match &result {
-            () => {
-                // Unit return type
+    if is_async {
+        input_fn.block = Box::new(parse_quote!({
+            async move {
+                let user_id = get_thread_local_value("user_id").unwrap_or_else(|| "unknown".to_string());
+                liblogger::log_info!(&format!("AUDIT: {} called", #fn_name), Some(format!("user_id={}", user_id)));
+                
+                let start_time = std::time::Instant::now();
+                let result = async move #orig_block.await;
+                let duration = start_time.elapsed();
+                
                 liblogger::log_info!(
                     &format!("AUDIT: {} completed in {} ms", #fn_name, duration.as_millis()),
                     Some(format!("user_id={}", user_id))
                 );
-            },
-            _ => {
-                // Any other return type
-                liblogger::log_info!(
-                    &format!("AUDIT: {} completed in {} ms with result: {:?}", 
-                        #fn_name, duration.as_millis(), result),
-                    Some(format!("user_id={}", user_id))
-                );
+                
+                result
+            }.await
+        }));
+    } else {
+        input_fn.block = Box::new(parse_quote!({
+            let user_id = get_thread_local_value("user_id").unwrap_or_else(|| "unknown".to_string());
+            liblogger::log_info!(&format!("AUDIT: {} called", #fn_name), Some(format!("user_id={}", user_id)));
+            
+            let start_time = std::time::Instant::now();
+            let result = #orig_block;
+            let duration = start_time.elapsed();
+            
+            // Use pattern matching on result
+            match &result {
+                () => {
+                    // Unit return type
+                    liblogger::log_info!(
+                        &format!("AUDIT: {} completed in {} ms", #fn_name, duration.as_millis()),
+                        Some(format!("user_id={}", user_id))
+                    );
+                },
+                _ => {
+                    // Any other return type
+                    liblogger::log_info!(
+                        &format!("AUDIT: {} completed in {} ms with result: {:?}", 
+                            #fn_name, duration.as_millis(), result),
+                        Some(format!("user_id={}", user_id))
+                    );
+                }
             }
-        }
-        
-        result
-    }));
+            
+            result
+        }));
+    }
     
     TokenStream::from(quote!(#input_fn))
 }
@@ -292,62 +404,123 @@ pub fn circuit_breaker(args: TokenStream, input: TokenStream) -> TokenStream {
     let mut input_fn = parse_macro_input!(input as ItemFn);
     let fn_name = get_fn_name(&input_fn);
     let orig_block = input_fn.block.clone();
+    let is_async = input_fn.sig.asyncness.is_some();
     
-    input_fn.block = Box::new(parse_quote!({
-        use std::sync::atomic::{AtomicU32, Ordering};
-        use std::sync::Mutex;
-        use std::time::{Instant, Duration};
-        
-        // Thread-safe failure counters
-        static FAILURE_COUNT: AtomicU32 = AtomicU32::new(0);
-        static LAST_SUCCESS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        
-        // Reset failure count after 30 seconds of success
-        let now = Instant::now();
-        let last_success_time = LAST_SUCCESS.load(Ordering::Relaxed);
-        
-        if last_success_time > 0 {
-            let elapsed = now.duration_since(Instant::now() - Duration::from_secs(last_success_time));
-            if elapsed > Duration::from_secs(30) {
-                FAILURE_COUNT.store(0, Ordering::Relaxed);
-            }
-        }
-        
-        // Check if circuit is open (too many failures)
-        let failures = FAILURE_COUNT.load(Ordering::Relaxed);
-        if failures >= #threshold {
-            liblogger::log_error!(
-                &format!("Circuit breaker open for {}: {} failures exceeded threshold {}", 
-                    #fn_name, failures, #threshold),
-                None
-            );
-            return Err(format!("Circuit breaker open for {}", #fn_name).into());
-        }
-        
-        // Call the function and track success/failure
-        let result = #orig_block;
-        
-        // Use pattern matching for Result
-        match &result {
-            Ok(_) => {
-                // Reset failure count on success
-                FAILURE_COUNT.store(0, Ordering::Relaxed);
-                LAST_SUCCESS.store(now.elapsed().as_secs(), Ordering::Relaxed);
-            },
-            Err(_) => {
-                // Increment failure count
-                FAILURE_COUNT.fetch_add(1, Ordering::Relaxed);
-                let new_count = FAILURE_COUNT.load(Ordering::Relaxed);
+    if is_async {
+        input_fn.block = Box::new(parse_quote!({
+            async move {
+                use std::sync::atomic::{AtomicU32, Ordering};
+                use std::sync::Mutex;
+                use std::time::{Instant, Duration};
                 
-                liblogger::log_warn!(&format!(
-                    "Circuit breaker: {} failed ({}/{} failures)", 
-                    #fn_name, new_count, #threshold
-                ), None);
+                // Thread-safe failure counters
+                static FAILURE_COUNT: AtomicU32 = AtomicU32::new(0);
+                static LAST_SUCCESS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+                
+                // Reset failure count after 30 seconds of success
+                let now = Instant::now();
+                let last_success_time = LAST_SUCCESS.load(Ordering::Relaxed);
+                
+                if last_success_time > 0 {
+                    let elapsed = now.duration_since(Instant::now() - Duration::from_secs(last_success_time));
+                    if elapsed > Duration::from_secs(30) {
+                        FAILURE_COUNT.store(0, Ordering::Relaxed);
+                    }
+                }
+                
+                // Check if circuit is open (too many failures)
+                let failures = FAILURE_COUNT.load(Ordering::Relaxed);
+                if failures >= #threshold {
+                    liblogger::log_error!(
+                        &format!("Circuit breaker open for {}: {} failures exceeded threshold {}", 
+                            #fn_name, failures, #threshold),
+                        None
+                    );
+                    return Err(format!("Circuit breaker open for {}", #fn_name).into());
+                }
+                
+                // Call the function and track success/failure
+                let result = async move #orig_block.await;
+                
+                // Use pattern matching for Result
+                match &result {
+                    Ok(_) => {
+                        // Reset failure count on success
+                        FAILURE_COUNT.store(0, Ordering::Relaxed);
+                        LAST_SUCCESS.store(now.elapsed().as_secs(), Ordering::Relaxed);
+                    },
+                    Err(_) => {
+                        // Increment failure count
+                        FAILURE_COUNT.fetch_add(1, Ordering::Relaxed);
+                        let new_count = FAILURE_COUNT.load(Ordering::Relaxed);
+                        
+                        liblogger::log_warn!(&format!(
+                            "Circuit breaker: {} failed ({}/{} failures)", 
+                            #fn_name, new_count, #threshold
+                        ), None);
+                    }
+                }
+                
+                result
+            }.await
+        }));
+    } else {
+        input_fn.block = Box::new(parse_quote!({
+            use std::sync::atomic::{AtomicU32, Ordering};
+            use std::sync::Mutex;
+            use std::time::{Instant, Duration};
+            
+            // Thread-safe failure counters
+            static FAILURE_COUNT: AtomicU32 = AtomicU32::new(0);
+            static LAST_SUCCESS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+            
+            // Reset failure count after 30 seconds of success
+            let now = Instant::now();
+            let last_success_time = LAST_SUCCESS.load(Ordering::Relaxed);
+            
+            if last_success_time > 0 {
+                let elapsed = now.duration_since(Instant::now() - Duration::from_secs(last_success_time));
+                if elapsed > Duration::from_secs(30) {
+                    FAILURE_COUNT.store(0, Ordering::Relaxed);
+                }
             }
-        }
-        
-        result
-    }));
+            
+            // Check if circuit is open (too many failures)
+            let failures = FAILURE_COUNT.load(Ordering::Relaxed);
+            if failures >= #threshold {
+                liblogger::log_error!(
+                    &format!("Circuit breaker open for {}: {} failures exceeded threshold {}", 
+                        #fn_name, failures, #threshold),
+                    None
+                );
+                return Err(format!("Circuit breaker open for {}", #fn_name).into());
+            }
+            
+            // Call the function and track success/failure
+            let result = #orig_block;
+            
+            // Use pattern matching for Result
+            match &result {
+                Ok(_) => {
+                    // Reset failure count on success
+                    FAILURE_COUNT.store(0, Ordering::Relaxed);
+                    LAST_SUCCESS.store(now.elapsed().as_secs(), Ordering::Relaxed);
+                },
+                Err(_) => {
+                    // Increment failure count
+                    FAILURE_COUNT.fetch_add(1, Ordering::Relaxed);
+                    let new_count = FAILURE_COUNT.load(Ordering::Relaxed);
+                    
+                    liblogger::log_warn!(&format!(
+                        "Circuit breaker: {} failed ({}/{} failures)", 
+                        #fn_name, new_count, #threshold
+                    ), None);
+                }
+            }
+            
+            result
+        }));
+    }
     
     TokenStream::from(quote!(#input_fn))
 }
@@ -749,6 +922,7 @@ pub fn catch_panic(_args: TokenStream, input: TokenStream) -> TokenStream {
     let mut input_fn = parse_macro_input!(input as ItemFn);
     let fn_name = get_fn_name(&input_fn);
     let orig_block = input_fn.block.clone();
+    let is_async = input_fn.sig.asyncness.is_some();
     
     // Determine return type
     let returns_result = if let syn::ReturnType::Type(_, ty) = &input_fn.sig.output {
@@ -762,48 +936,74 @@ pub fn catch_panic(_args: TokenStream, input: TokenStream) -> TokenStream {
         false
     };
     
-    input_fn.block = if returns_result {
-        Box::new(parse_quote!({
-            use std::panic::{catch_unwind, AssertUnwindSafe};
-            
-            match catch_unwind(AssertUnwindSafe(|| #orig_block)) {
-                Ok(result) => result,
-                Err(panic_err) => {
-                    let panic_msg = if let Some(s) = panic_err.downcast_ref::<&str>() {
-                        s.to_string()
-                    } else if let Some(s) = panic_err.downcast_ref::<String>() {
-                        s.clone()
-                    } else {
-                        "Unknown panic ".to_string()
-                    };
+    if is_async {
+        // For async functions, we can't use catch_unwind effectively
+        // Instead, we just wrap the execution and handle errors at the Result level
+        if returns_result {
+            input_fn.block = Box::new(parse_quote!({
+                async move {
+                    let result = async move #orig_block.await;
                     
-                    liblogger::log_error!(&format!("{} caught panic: {}", #fn_name, panic_msg), None);
-                    Err(format!("Panic in {}: {}", #fn_name, panic_msg).into())
-                }
-            }
-        }))
+                    // Log errors if they occur
+                    if let Err(ref err) = result {
+                        liblogger::log_error!(&format!("{} returned error: {:?}", #fn_name, err), None);
+                    }
+                    
+                    result
+                }.await
+            }));
+        } else {
+            input_fn.block = Box::new(parse_quote!({
+                async move {
+                    let result = async move #orig_block.await;
+                    result
+                }.await
+            }));
+        }
     } else {
-        Box::new(parse_quote!({
-            use std::panic::{catch_unwind, AssertUnwindSafe};
-            
-            match catch_unwind(AssertUnwindSafe(|| #orig_block)) {
-                Ok(result) => result,
-                Err(panic_err) => {
-                    let panic_msg = if let Some(s) = panic_err.downcast_ref::<&str>() {
-                        s.to_string()
-                    } else if let Some(s) = panic_err.downcast_ref::<String>() {
-                        s.clone()
-                    } else {
-                        "Unknown panic ".to_string()
-                    };
-                    
-                    liblogger::log_error!(&format!("{} caught panic: {}", #fn_name, panic_msg), None);
-                    // Return default value as fallback
-                    Default::default()
+        input_fn.block = if returns_result {
+            Box::new(parse_quote!({
+                use std::panic::{catch_unwind, AssertUnwindSafe};
+                
+                match catch_unwind(AssertUnwindSafe(|| #orig_block)) {
+                    Ok(result) => result,
+                    Err(panic_err) => {
+                        let panic_msg = if let Some(s) = panic_err.downcast_ref::<&str>() {
+                            s.to_string()
+                        } else if let Some(s) = panic_err.downcast_ref::<String>() {
+                            s.clone()
+                        } else {
+                            "Unknown panic ".to_string()
+                        };
+                        
+                        liblogger::log_error!(&format!("{} caught panic: {}", #fn_name, panic_msg), None);
+                        Err(format!("Panic in {}: {}", #fn_name, panic_msg).into())
+                    }
                 }
-            }
-        }))
-    };
+            }))
+        } else {
+            Box::new(parse_quote!({
+                use std::panic::{catch_unwind, AssertUnwindSafe};
+                
+                match catch_unwind(AssertUnwindSafe(|| #orig_block)) {
+                    Ok(result) => result,
+                    Err(panic_err) => {
+                        let panic_msg = if let Some(s) = panic_err.downcast_ref::<&str>() {
+                            s.to_string()
+                        } else if let Some(s) = panic_err.downcast_ref::<String>() {
+                            s.clone()
+                        } else {
+                            "Unknown panic ".to_string()
+                        };
+                        
+                        liblogger::log_error!(&format!("{} caught panic: {}", #fn_name, panic_msg), None);
+                        // Return default value as fallback
+                        Default::default()
+                    }
+                }
+            }))
+        };
+    }
     
     TokenStream::from(quote!(#input_fn))
 }
