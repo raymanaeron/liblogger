@@ -283,7 +283,7 @@ fn traced_operation() {
 
 ## Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+We welcome contributions!
 
 ### Adding New Macros
 
