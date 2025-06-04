@@ -107,7 +107,7 @@ fn calculate_price(product: &Product) -> Result<Price, BusinessError> {
 - `#[log_response]` - Return value logging
 - `#[measure_time]` - Execution timing
 
-### ⚡ Performance & Monitoring  
+### Performance & Monitoring  
 - `#[log_memory_usage]` - Memory usage tracking
 - `#[log_cpu_time]` - CPU time monitoring
 - `#[log_concurrency]` - Concurrent execution tracking
