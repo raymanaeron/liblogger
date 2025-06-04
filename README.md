@@ -328,7 +328,7 @@ fn traced_operation() {
 
 ## Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+We welcome contributions! 
 
 ### Adding New Macros
 
@@ -336,44 +336,3 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guid
 2. Add utility functions in `liblogger_macros/src/macro_utils.rs`
 3. Write tests in `logger_tests/src/`
 4. Update documentation in `proc_macros.md`
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Roadmap
-
-- [ ] **Async Improvements**: Better async/await support across all macros
-- [ ] **Custom Sinks**: Pluggable output destinations (Elasticsearch, Kafka, etc.)
-- [ ] **Configuration Management**: Runtime configuration of macro behavior
-- [ ] **Performance Optimizations**: Zero-cost abstractions for hot paths
-- [ ] **Cloud Integration**: Native support for AWS CloudWatch, GCP Logging
-- [ ] **AI/ML Integration**: Intelligent anomaly detection and pattern recognition
-- [ ] **Visual Dashboards**: Web-based monitoring and alerting interface
-
-## Examples
-
-Check out the `examples/` directory for comprehensive usage examples:
-
-- `basic_usage.rs` - Getting started with core logging
-- `macro_showcase.rs` - Demonstration of all available macros
-- `microservice_example.rs` - Full microservice with comprehensive monitoring
-- `performance_monitoring.rs` - Performance-focused instrumentation
-- `security_auditing.rs` - Security and compliance logging examples
-
-## Support
-
-- Documentation: https://docs.rs/liblogger
-- Issue Tracker: https://github.com/yourusername/liblogger/issues
-- Discussions: https://github.com/yourusername/liblogger/discussions
-- Email Support: support@liblogger.dev
-
-## Acknowledgments
-
-- Inspired by the observability needs of modern distributed systems
-- Built on the shoulders of the excellent Rust ecosystem
-- Special thanks to the Rust macro system that makes this level of instrumentation possible
-
----
-
-*LibLogger - Making Rust applications observable, one function at a time.*
